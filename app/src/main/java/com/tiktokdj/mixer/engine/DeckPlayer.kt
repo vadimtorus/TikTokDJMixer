@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
@@ -113,7 +114,7 @@ class DeckPlayer(
     fun setSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 2.0f)
         exoPlayer?.playbackParameters = PlaybackParameters(clamped)
-        _state.value = _state.value.copy(pitch = clamped)
+        _state.value = _state.value.copy(speed = clamped)
     }
 
     fun setEQ(low: Float, mid: Float, high: Float) {
@@ -163,7 +164,10 @@ class DeckPlayer(
 
     fun getCurrentPositionMs(): Long = _position.value
 
-    fun getDurationMs(): Long = exoPlayer?.duration ?: 0L
+    fun getDurationMs(): Long {
+        val duration = exoPlayer?.duration ?: 0L
+        return if (duration == C.TIME_UNSET || duration < 0) 0L else duration
+    }
 
     fun isPlaying(): Boolean = _state.value.isPlaying
 

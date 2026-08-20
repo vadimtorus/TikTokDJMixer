@@ -294,8 +294,9 @@ class RTMPStreamer {
     fun isStreaming(): Boolean = _streamState.value is RTMPState.Streaming
 
     fun cleanup() {
-        scope.cancel()
+        scope.coroutineContext.cancelChildren()
         runBlocking { disconnect() }
+        scope.cancel()
     }
 
     private class AMF0Writer {

@@ -27,7 +27,7 @@ data class DeckState(
     val track: Track? = null,
     val isPlaying: Boolean = false,
     val volume: Float = 0.8f,
-    val pitch: Float = 1.0f,
+    val speed: Float = 1.0f,
     val positionMs: Long = 0,
     val eq: EQState = EQState(),
     val isCueActive: Boolean = false,
@@ -48,18 +48,6 @@ data class MixerState(
     val crossfader: Float = 0.5f,
     val masterVolume: Float = 0.8f,
     val isSyncEnabled: Boolean = false
-)
-
-@Serializable
-data class StreamConfig(
-    val method: StreamMethod = StreamMethod.RTMP,
-    val rtmpUrl: String = "",
-    val tiktokAccessToken: String = "",
-    val bitrate: Int = 2500,
-    val resolution: StreamResolution = StreamResolution.HD_720P,
-    val fps: Int = 30,
-    val enableMicrophone: Boolean = false,
-    val microphoneVolume: Float = 0.5f
 )
 
 @Serializable
@@ -114,20 +102,6 @@ data class UpdateInfo(
     val isRequired: Boolean = false,
     val publishedAt: Long = 0L
 )
-
-@Serializable
-data class Sample(
-    val id: String,
-    val name: String,
-    val category: SampleCategory,
-    val uri: String,
-    val durationMs: Long
-)
-
-@Serializable
-enum class SampleCategory {
-    DRUMS, BASS, SYNTH, VOCAL, EFFECT, OTHER
-}
 
 @Serializable
 data class Effect(

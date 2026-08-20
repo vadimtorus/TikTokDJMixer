@@ -2,7 +2,6 @@ package com.tiktokdj.mixer.streaming
 
 import android.content.Context
 import android.util.Log
-import com.tiktokdj.mixer.model.StreamConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -141,7 +140,7 @@ class TikTokLiveStreamer(private val context: Context) {
             connection = URL("$streamServerUrl/push?room_id=$roomId").openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
-            connection.setRequestProperty("Content-Type", "audio/aac")
+            connection.setRequestProperty("Content-Type", "audio/pcm")
             connection.doOutput = true
 
             connection.outputStream.use { it.write(audioData) }

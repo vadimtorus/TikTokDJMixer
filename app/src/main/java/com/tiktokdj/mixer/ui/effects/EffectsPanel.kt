@@ -1,9 +1,6 @@
 package com.tiktokdj.mixer.ui.effects
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,7 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,17 +71,6 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text("Effect Modulation", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-
-        XYModPad(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            onModulationChange = { x, y ->
-                // Apply to active effects
-            }
-        )
-
         if (activeEffects.isNotEmpty()) {
             Text("Active Effects", fontSize = 14.sp, fontWeight = FontWeight.Medium)
             activeEffects.forEach { type ->
@@ -140,56 +125,6 @@ fun EffectButton(
                 fontSize = 11.sp,
                 color = if (isActive) MaterialTheme.colorScheme.onPrimary
                          else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-fun XYModPad(
-    modifier: Modifier = Modifier,
-    onModulationChange: (Float, Float) -> Unit = { _, _ -> }
-) {
-    var offsetX by remember { mutableFloatStateOf(0.5f) }
-    var offsetY by remember { mutableFloatStateOf(0.5f) }
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF1A1A2E))
-            .pointerInput(Unit) {
-                detectDragGestures { change, _ ->
-                    change.consume()
-                    offsetX = (change.position.x / size.width).coerceIn(0f, 1f)
-                    offsetY = (change.position.y / size.height).coerceIn(0f, 1f)
-                    onModulationChange(offsetX, offsetY)
-                }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (i in 1..4) {
-                drawLine(
-                    color = Color.White.copy(alpha = 0.1f),
-                    start = Offset(size.width * i / 5, 0f),
-                    end = Offset(size.width * i / 5, size.height)
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = 0.1f),
-                    start = Offset(0f, size.height * i / 5),
-                    end = Offset(size.width, size.height * i / 5)
-                )
-            }
-
-            drawCircle(
-                color = Color.Cyan.copy(alpha = 0.3f),
-                radius = 24f,
-                center = Offset(offsetX * size.width, offsetY * size.height)
-            )
-            drawCircle(
-                color = Color.Cyan.copy(alpha = 0.8f),
-                radius = 12f,
-                center = Offset(offsetX * size.width, offsetY * size.height)
             )
         }
     }

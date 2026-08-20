@@ -187,11 +187,12 @@ fun SpectrumAnalyzer(
     getSpectrumData: () -> FloatArray,
     modifier: Modifier = Modifier
 ) {
-    var bands by remember { mutableStateOf(FloatArray(32)) }
+    var bands by remember { mutableStateOf(List(32) { 0f }) }
 
     LaunchedEffect(Unit) {
         while (true) {
-            bands = getSpectrumData()
+            val data = getSpectrumData()
+            bands = data.toList()
             kotlinx.coroutines.delay(50)
         }
     }

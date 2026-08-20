@@ -4,7 +4,6 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
-import com.tiktokdj.mixer.R
 
 class TikTokDJApp : Application() {
 

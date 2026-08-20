@@ -30,27 +30,35 @@ class EffectsProcessor {
     }
 
     fun addEffect(effect: Effect) {
-        activeEffects[effect.type] = effect
+        synchronized(dspLock) {
+            activeEffects[effect.type] = effect
+        }
     }
 
     fun removeEffect(type: EffectType) {
-        activeEffects.remove(type)
+        synchronized(dspLock) {
+            activeEffects.remove(type)
+        }
     }
 
     fun setEffectIntensity(type: EffectType, intensity: Float) {
-        activeEffects[type]?.let {
-            activeEffects[type] = it.copy(intensity = intensity.coerceIn(0f, 1f))
+        synchronized(dspLock) {
+            activeEffects[type]?.let {
+                activeEffects[type] = it.copy(intensity = intensity.coerceIn(0f, 1f))
+            }
         }
     }
 
     fun clearEffects() {
-        activeEffects.clear()
-        delayWritePos = 0
-        delayBuffer.fill(0f)
-        flangerPos = 0
-        flangerPhase = 0f
-        flangerBuffer.fill(0f)
-        phaserStages = Array(4) { floatArrayOf(0f, 0f) }
+        synchronized(dspLock) {
+            activeEffects.clear()
+            delayWritePos = 0
+            delayBuffer.fill(0f)
+            flangerPos = 0
+            flangerPhase = 0f
+            flangerBuffer.fill(0f)
+            phaserStages = Array(4) { floatArrayOf(0f, 0f) }
+        }
     }
 
     fun getActiveEffects(): List<Effect> = activeEffects.values.toList()

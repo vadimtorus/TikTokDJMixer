@@ -7,6 +7,7 @@ import com.tiktokdj.mixer.model.MixerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -24,7 +25,7 @@ class MixerEngine(context: Context) {
     private val spectralAnalyzer = SpectralAnalyzer()
 
     private val crossfadeHandler = Handler(Looper.getMainLooper())
-    private val crossfadeRunnables = mutableListOf<Runnable>()
+    private val crossfadeRunnables = CopyOnWriteArrayList<Runnable>()
 
     fun initialize() {
         deckA.initialize()

@@ -77,11 +77,12 @@ class AppUpdater(private val context: Context) {
     }
 
     suspend fun checkForUpdates(owner: String, repo: String): UpdateInfo? {
+        var connection: HttpURLConnection? = null
         return try {
             _updateState.value = UpdateState.Checking
 
             val url = URL("$GITHUB_API_URL/$owner/$repo/releases/latest")
-            val connection = url.openConnection() as HttpURLConnection
+            connection = url.openConnection() as HttpURLConnection
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
@@ -97,6 +98,8 @@ class AppUpdater(private val context: Context) {
             Log.e(TAG, "Check for updates error", e)
             _updateState.value = UpdateState.Error("Check failed: ${e.message}")
             null
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -190,7 +193,10 @@ class AppUpdater(private val context: Context) {
     private fun installUpdate() {
         try {
             val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val uri = downloadManager.getUriForDownloadedFile(downloadId)
+            val uri = downloadManager.getUriForDownloadedFile(downloadId) ?: run {
+                _updateState.value = UpdateState.Error("Download URI is null")
+                return
+            }
 
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")

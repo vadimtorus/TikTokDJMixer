@@ -115,7 +115,6 @@ class StreamingService : Service() {
 
     override fun onDestroy() {
         serviceScope.cancel()
-        runBlocking { streamManager?.stopStreaming() }
         streamManager?.cleanup()
         streamManager = null
         super.onDestroy()

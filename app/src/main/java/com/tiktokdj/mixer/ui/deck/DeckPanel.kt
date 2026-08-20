@@ -179,11 +179,11 @@ fun DeckPanel(
                 )
             )
 
-            Text("Pitch", fontSize = 10.sp)
+            Text("Speed", fontSize = 10.sp)
             Slider(
-                value = state.pitch,
+                value = state.speed,
                 onValueChange = onPitchChange,
-                valueRange = 0.8f..1.2f,
+                valueRange = 0.5f..2.0f,
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
                     thumbColor = deckColor,
