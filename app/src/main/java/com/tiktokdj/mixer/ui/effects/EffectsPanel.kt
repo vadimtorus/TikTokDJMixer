@@ -20,19 +20,22 @@ import com.tiktokdj.mixer.engine.MixerEngine
 import com.tiktokdj.mixer.model.Effect
 import com.tiktokdj.mixer.model.EffectType
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EffectsPanel(mixerEngine: MixerEngine) {
     val activeEffects = remember { mutableStateListOf<EffectType>() }
 
-    fun toggleEffect(type: EffectType) {
-        if (activeEffects.contains(type)) {
-            activeEffects.remove(type)
-            mixerEngine.effectsProcessor.removeEffect(type)
-        } else {
-            activeEffects.add(type)
-            mixerEngine.effectsProcessor.addEffect(
-                Effect(type.name, type.name, type, 0.5f)
-            )
+    val toggleEffect = remember<(EffectType) -> Unit> {
+        { type: EffectType ->
+            if (activeEffects.contains(type)) {
+                activeEffects.remove(type)
+                mixerEngine.effectsProcessor.removeEffect(type)
+            } else {
+                activeEffects.add(type)
+                mixerEngine.effectsProcessor.addEffect(
+                    Effect(type.name, type.name, type, 0.5f)
+                )
+            }
         }
     }
 
@@ -52,21 +55,21 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EffectButton(EffectType.ECHO, "Echo", Icons.Default.GraphicEq, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.REVERB, "Reverb", Icons.Default.Waves, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.DELAY, "Delay", Icons.Default.Timer, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.ECHO, "Echo", Icons.Default.GraphicEq, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.REVERB, "Reverb", Icons.Default.Waves, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.DELAY, "Delay", Icons.Default.Timer, activeEffects, toggleEffect, Modifier.weight(1f))
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EffectButton(EffectType.FLANGER, "Flanger", Icons.Default.SwapVert, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.PHASER, "Phaser", Icons.Default.RotateRight, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.FILTER_LOW_PASS, "LP Filter", Icons.Default.FilterAlt, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.FLANGER, "Flanger", Icons.Default.SwapVert, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.PHASER, "Phaser", Icons.Default.RotateRight, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.FILTER_LOW_PASS, "LP Filter", Icons.Default.FilterAlt, activeEffects, toggleEffect, Modifier.weight(1f))
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EffectButton(EffectType.FILTER_HIGH_PASS, "HP Filter", Icons.Default.FilterAltOff, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.DISTORTION, "Distort", Icons.Default.Bolt, activeEffects, ::toggleEffect, Modifier.weight(1f))
-                EffectButton(EffectType.BITCRUSHER, "Bitcrush", Icons.Default.Memory, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.FILTER_HIGH_PASS, "HP Filter", Icons.Default.FilterAltOff, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.DISTORTION, "Distort", Icons.Default.Bolt, activeEffects, toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.BITCRUSHER, "Bitcrush", Icons.Default.Memory, activeEffects, toggleEffect, Modifier.weight(1f))
             }
         }
 

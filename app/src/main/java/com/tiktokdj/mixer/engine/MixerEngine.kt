@@ -7,6 +7,8 @@ import com.tiktokdj.mixer.model.MixerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.cos
+import kotlin.math.sin
 
 class MixerEngine(context: Context) {
 
@@ -55,7 +57,7 @@ class MixerEngine(context: Context) {
         if (trackA.bpm > 0 && trackB.bpm > 0) {
             val targetBPM = trackA.bpm
             val pitchB = targetBPM / trackB.bpm
-            deckB.setPitch(pitchB)
+            deckB.setSpeed(pitchB)
         }
     }
 
@@ -63,8 +65,9 @@ class MixerEngine(context: Context) {
         val crossfader = _mixerState.value.crossfader
         val masterVol = _mixerState.value.masterVolume
 
-        val volA = masterVol * (1f - crossfader)
-        val volB = masterVol * crossfader
+        val angle = crossfader * Math.PI.toFloat() / 2f
+        val volA = masterVol * cos(angle)
+        val volB = masterVol * sin(angle)
 
         deckA.setVolume(volA)
         deckB.setVolume(volB)

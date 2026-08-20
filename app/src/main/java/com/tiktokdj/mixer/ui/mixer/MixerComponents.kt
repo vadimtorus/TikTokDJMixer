@@ -13,12 +13,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tiktokdj.mixer.model.EQState
-import com.tiktokdj.mixer.model.DeckState
-import com.tiktokdj.mixer.utils.ColorUtils
+import com.tiktokdj.mixer.ui.theme.DeckAColor
+import com.tiktokdj.mixer.ui.theme.DeckBColor
+import com.tiktokdj.mixer.ui.theme.EQGreen
+import com.tiktokdj.mixer.ui.theme.EQOrange
 
 @Composable
 fun CrossfaderBar(
@@ -159,12 +162,22 @@ fun EQKnob(label: String, value: Float, onValueChange: (Float) -> Unit) {
         modifier = Modifier.padding(4.dp)
     ) {
         Text(label, fontSize = 8.sp)
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.width(48.dp).height(60.dp),
-            colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
-        )
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(60.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(48.dp)
+                    .graphicsLayer { rotationZ = -90f },
+                colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary)
+            )
+        }
     }
 }
 

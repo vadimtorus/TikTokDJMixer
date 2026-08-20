@@ -20,6 +20,7 @@ class DeckPlayer(
     private val context: Context,
     private val deckId: String
 ) {
+    @Volatile
     private var exoPlayer: ExoPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
 
@@ -104,8 +105,8 @@ class DeckPlayer(
         applyVolume()
     }
 
-    fun setPitch(pitch: Float) {
-        val clamped = pitch.coerceIn(0.5f, 2.0f)
+    fun setSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.5f, 2.0f)
         exoPlayer?.playbackParameters = PlaybackParameters(clamped)
         _state.value = _state.value.copy(pitch = clamped)
     }

@@ -3,6 +3,7 @@ package com.tiktokdj.mixer.ui.deck
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -126,7 +127,14 @@ fun DeckPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
+                    .clip(RoundedCornerShape(2.dp))
+                    .then(
+                        Modifier.clickable {
+                            state.track?.let { track ->
+                                onSeek(track.durationMs / 2)
+                            }
+                        }
+                    ),
                 color = deckColor
             )
 
@@ -138,7 +146,7 @@ fun DeckPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onCue) {
-                    Icon(Icons.Default.Cue, "Cue", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.FiberManualRecord, "Cue", tint = MaterialTheme.colorScheme.primary)
                 }
 
                 IconButton(

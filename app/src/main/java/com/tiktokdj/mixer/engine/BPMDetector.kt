@@ -31,7 +31,7 @@ class BPMDetector {
         for (i in 0 until numFrames) {
             val start = i * hopSize
             val frame = data.copyOfRange(start, minOf(start + frameSize, data.size))
-            val spectrum = computeSpectrum(frame)
+            val spectrum = computeSpectrumFFT(frame)
 
             var flux = 0f
             for (j in spectrum.indices) {
@@ -45,21 +45,72 @@ class BPMDetector {
         return normalize(onsetStrength)
     }
 
-    private fun computeSpectrum(frame: FloatArray): FloatArray {
-        val n = frame.size
-        val spectrum = FloatArray(n / 2)
+    private fun computeSpectrumFFT(frame: FloatArray): FloatArray {
+        val n = 1 shl (32 - frame.size.countLeadingZeroBits() - 1).coerceAtLeast(1)
+        val real = FloatArray(n)
+        val imag = FloatArray(n)
+        frame.copyInto(real, 0, 0, minOf(frame.size, n))
 
-        for (k in 0 until n / 2) {
-            var real = 0f
-            var imag = 0f
-            for (i in 0 until n) {
-                val angle = (2.0 * PI * k * i / n).toFloat()
-                real += frame[i] * cos(angle)
-                imag -= frame[i] * sin(angle)
-            }
-            spectrum[k] = sqrt(real * real + imag * imag) / n
+        fftInPlace(real, imag)
+
+        val spectrum = FloatArray(n / 2)
+        for (k in spectrum.indices) {
+            spectrum[k] = sqrt(real[k] * real[k] + imag[k] * imag[k]) / n
         }
         return spectrum
+    }
+
+    private fun fftInPlace(real: FloatArray, imag: FloatArray) {
+        val n = real.size
+        if (n == 0) return
+
+        var j = 0
+        for (i in 0 until n - 1) {
+            if (i < j) {
+                var temp = real[i]; real[i] = real[j]; real[j] = temp
+                temp = imag[i]; imag[i] = imag[j]; imag[j] = temp
+            }
+            var k = n / 2
+            while (k <= j) {
+                j -= k
+                k /= 2
+            }
+            j += k
+        }
+
+        var len = 2
+        while (len <= n) {
+            val halfLen = len / 2
+            val angle = -2.0 * PI / len
+            val wReal = cos(angle).toFloat()
+            val wImag = sin(angle).toFloat()
+
+            var i = 0
+            while (i < n) {
+                var curReal = 1.0f
+                var curImag = 0.0f
+
+                for (jj in 0 until halfLen) {
+                    val uIdx = i + jj
+                    val vIdx = i + jj + halfLen
+
+                    val tReal = curReal * real[vIdx] - curImag * imag[vIdx]
+                    val tImag = curReal * imag[vIdx] + curImag * real[vIdx]
+
+                    real[vIdx] = real[uIdx] - tReal
+                    imag[vIdx] = imag[uIdx] - tImag
+                    real[uIdx] += tReal
+                    imag[uIdx] += tImag
+
+                    val newReal = curReal * wReal - curImag * wImag
+                    val newImag = curReal * wImag + curImag * wReal
+                    curReal = newReal
+                    curImag = newImag
+                }
+                i += len
+            }
+            len *= 2
+        }
     }
 
     private fun computeAutocorrelation(data: FloatArray, sampleRate: Int): FloatArray {
@@ -70,7 +121,12 @@ class BPMDetector {
         val result = FloatArray(maxLag + 1)
 
         val mean = data.average().toFloat()
-        val variance = data.map { (it - mean) * (it - mean) }.average().toFloat()
+        var varianceSum = 0f
+        for (d in data) {
+            val diff = d - mean
+            varianceSum += diff * diff
+        }
+        val variance = varianceSum / n
 
         if (variance < 1e-10f) return result
 
@@ -127,9 +183,12 @@ class BPMDetector {
                 val nextIdx = (pos + beatInterval).toInt().coerceAtMost(audioData.size - 1)
 
                 if (idx < audioData.size && nextIdx < audioData.size) {
-                    val energy = audioData.sliceArray(idx until nextIdx)
-                    val variance = energy.map { it * it }.average().toFloat()
-                    score += variance
+                    var varianceSum = 0f
+                    for (k in idx until nextIdx) {
+                        val v = audioData[k]
+                        varianceSum += v * v
+                    }
+                    score += varianceSum / (nextIdx - idx).coerceAtLeast(1)
                 }
                 pos += beatInterval
             }

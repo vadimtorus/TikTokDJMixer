@@ -91,7 +91,8 @@ class TrackLoader(private val context: Context) {
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND " +
                 "(${MediaStore.Audio.Media.TITLE} LIKE ? OR ${MediaStore.Audio.Media.ARTIST} LIKE ?)"
-        val selectionArgs = arrayOf("%$query%", "%$query%")
+        val escapedQuery = query.replace("%", "\\%").replace("_", "\\_")
+        val selectionArgs = arrayOf("%$escapedQuery%", "%$escapedQuery%")
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
         var cursor: Cursor? = null

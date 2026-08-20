@@ -8,6 +8,7 @@ import kotlin.math.*
 class EffectsProcessor {
 
     private val activeEffects = ConcurrentHashMap<EffectType, Effect>()
+    private val dspLock = Any()
 
     private var delayBuffer = FloatArray(96000)
     private var delayWritePos = 0
@@ -20,8 +21,10 @@ class EffectsProcessor {
         if (activeEffects.isEmpty()) return input
 
         var output = input.copyOf()
-        for ((type, effect) in activeEffects) {
-            output = applyEffect(output, type, effect.intensity, sampleRate)
+        synchronized(dspLock) {
+            for ((type, effect) in activeEffects) {
+                output = applyEffect(output, type, effect.intensity, sampleRate)
+            }
         }
         return output
     }
@@ -151,7 +154,7 @@ class EffectsProcessor {
     }
 
     private fun applyLowPass(input: FloatArray, intensity: Float, sampleRate: Int): FloatArray {
-        val cutoff = 200 + intensity * 18000
+        val cutoff = 18200f - intensity * 18000f
         val rc = 1.0f / (2 * PI.toFloat() * cutoff)
         val dt = 1.0f / sampleRate
         val alpha = dt / (rc + dt)
@@ -184,9 +187,11 @@ class EffectsProcessor {
 
     private fun applyDistortion(input: FloatArray, intensity: Float): FloatArray {
         val gain = 1f + intensity * 10f
+        val blend = intensity.coerceAtLeast(0.01f)
         return FloatArray(input.size) { i ->
             val amplified = input[i] * gain
-            ((2f / PI.toFloat()) * atan(amplified * intensity)).coerceIn(-1f, 1f)
+            val distorted = ((2f / PI.toFloat()) * atan(amplified)).coerceIn(-1f, 1f)
+            input[i] * (1f - blend) + distorted * blend
         }
     }
 

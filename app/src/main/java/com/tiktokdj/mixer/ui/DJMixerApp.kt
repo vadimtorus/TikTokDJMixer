@@ -117,7 +117,7 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
                 onPlayPause = { mixerEngine.togglePlayPauseDeckA() },
                 onSeek = { mixerEngine.deckA.seekTo(it) },
                 onVolumeChange = { mixerEngine.deckA.setVolume(it) },
-                onPitchChange = { mixerEngine.deckA.setPitch(it) },
+                onPitchChange = { mixerEngine.deckA.setSpeed(it) },
                 onCue = { mixerEngine.deckA.setCuePoint() },
                 onHotCue = { mixerEngine.deckA.jumpToHotCue(it) }
             )
@@ -129,7 +129,7 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
                 onPlayPause = { mixerEngine.togglePlayPauseDeckB() },
                 onSeek = { mixerEngine.deckB.seekTo(it) },
                 onVolumeChange = { mixerEngine.deckB.setVolume(it) },
-                onPitchChange = { mixerEngine.deckB.setPitch(it) },
+                onPitchChange = { mixerEngine.deckB.setSpeed(it) },
                 onCue = { mixerEngine.deckB.setCuePoint() },
                 onHotCue = { mixerEngine.deckB.jumpToHotCue(it) }
             )
