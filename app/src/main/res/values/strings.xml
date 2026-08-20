@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TikTok DJ Mixer</string>
+    <string name="channel_streaming">Streaming</string>
+    <string name="channel_streaming_desc">Active stream notifications</string>
+    <string name="channel_updates">Updates</string>
+    <string name="channel_updates_desc">App update notifications</string>
 </resources>

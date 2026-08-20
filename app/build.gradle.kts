@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -24,9 +23,9 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            val storeFilePath = System.getenv("SIGNING_STORE_FILE")
-            if (storeFilePath != null && storeFilePath.isNotEmpty()) {
+        val storeFilePath = System.getenv("SIGNING_STORE_FILE")
+        if (storeFilePath != null && storeFilePath.isNotEmpty()) {
+            create("release") {
                 storeFile = file(storeFilePath)
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                 keyAlias = System.getenv("SIGNING_KEY_ALIAS")
@@ -102,16 +101,6 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
-
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
-    implementation("com.github.bumptech.glide:glide:4.16.0")
-
-    implementation("net.sourceforge.aacenc:aacenc:0.1.2")
-
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     implementation("androidx.compose.foundation:foundation")
 

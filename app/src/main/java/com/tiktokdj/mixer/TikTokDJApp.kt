@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.tiktokdj.mixer.R
 
 class TikTokDJApp : Application() {
 
@@ -26,18 +27,18 @@ class TikTokDJApp : Application() {
 
             val streamingChannel = NotificationChannel(
                 CHANNEL_ID_STREAMING,
-                "Стриминг",
+                getString(R.string.channel_streaming),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Уведомления о активном стриме"
+                description = getString(R.string.channel_streaming_desc)
             }
 
             val updateChannel = NotificationChannel(
                 CHANNEL_ID_UPDATE,
-                "Обновления",
+                getString(R.string.channel_updates),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Уведомления об обновлениях приложения"
+                description = getString(R.string.channel_updates_desc)
             }
 
             manager.createNotificationChannel(streamingChannel)
