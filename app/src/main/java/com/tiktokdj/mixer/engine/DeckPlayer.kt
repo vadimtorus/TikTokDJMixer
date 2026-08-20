@@ -23,6 +23,8 @@ class DeckPlayer(
     @Volatile
     private var exoPlayer: ExoPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
+    @Volatile
+    private var positionUpdaterRunning = false
 
     private val _state = MutableStateFlow(DeckState())
     val state: StateFlow<DeckState> = _state.asStateFlow()
@@ -48,6 +50,8 @@ class DeckPlayer(
             }
             if (exoPlayer != null && _state.value.isPlaying) {
                 handler.postDelayed(this, 50)
+            } else {
+                positionUpdaterRunning = false
             }
         }
     }
@@ -80,7 +84,8 @@ class DeckPlayer(
         if (_state.value.track == null) return
         exoPlayer?.play()
         _state.value = _state.value.copy(isPlaying = true)
-        if (!handler.hasCallbacks(positionUpdater)) {
+        if (!positionUpdaterRunning) {
+            positionUpdaterRunning = true
             handler.post(positionUpdater)
         }
     }
@@ -165,6 +170,7 @@ class DeckPlayer(
     fun hasTrack(): Boolean = _state.value.track != null
 
     fun release() {
+        positionUpdaterRunning = false
         handler.removeCallbacks(positionUpdater)
         exoPlayer?.release()
         exoPlayer = null

@@ -3,7 +3,6 @@ package com.tiktokdj.mixer.ui.deck
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,24 +118,25 @@ fun DeckPanel(
                 }
             }
 
-            LinearProgressIndicator(
-                progress = {
-                    val duration = state.track?.durationMs ?: 1L
-                    (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+            var seekPosition by remember { mutableFloatStateOf(0f) }
+            val duration = state.track?.durationMs ?: 1L
+
+            Slider(
+                value = seekPosition,
+                onValueChange = { seekPosition = it },
+                onValueChangeFinished = {
+                    onSeek((seekPosition * duration).toLong())
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .then(
-                        Modifier.clickable {
-                            state.track?.let { track ->
-                                onSeek(track.durationMs / 2)
-                            }
-                        }
-                    ),
-                color = deckColor
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = deckColor,
+                    activeTrackColor = deckColor
+                )
             )
+            LaunchedEffect(state.positionMs, duration) {
+                seekPosition = if (duration > 0) state.positionMs.toFloat() / duration else 0f
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 

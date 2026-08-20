@@ -195,11 +195,6 @@ class RTMPStreamer {
                 0x03 -> map[key] = readAMF0Object(buffer)
                 else -> return map
             }
-            val endMarker = buffer.short.toInt() and 0xFFFF
-            if (endMarker == 0x00 && buffer.hasRemaining()) {
-                val objEnd = buffer.get().toInt() and 0xFF
-                if (objEnd == 0x09) break
-            }
         }
         return map
     }
@@ -280,10 +275,13 @@ class RTMPStreamer {
     suspend fun disconnect() {
         streamingJob?.cancel()
         streamingJob = null
+        val dos = outputStream
+        val dis = inputStream
+        val sock = socket
         try {
-            outputStream?.close()
-            inputStream?.close()
-            socket?.close()
+            if (dos != null) synchronized(dos) { dos.close() }
+            dis?.close()
+            sock?.close()
         } catch (e: Exception) {
             Log.e(TAG, "Disconnect error", e)
         }

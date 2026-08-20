@@ -176,22 +176,27 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
     val trackLoader = remember { TrackLoader(LocalContext.current.applicationContext) }
     val coroutineScope = rememberCoroutineScope()
 
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isBlank()) {
+            tracks = emptyList()
+            isLoading = false
+            return@LaunchedEffect
+        }
+        isLoading = true
+        delay(300)
+        tracks = withContext(Dispatchers.IO) {
+            trackLoader.searchTracks(searchQuery)
+        }
+        isLoading = false
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         OutlinedTextField(
             value = searchQuery,
-            onValueChange = {
-                searchQuery = it
-                coroutineScope.launch {
-                    isLoading = true
-                    tracks = withContext(Dispatchers.IO) {
-                        trackLoader.searchTracks(it)
-                    }
-                    isLoading = false
-                }
-            },
+            onValueChange = { searchQuery = it },
             label = { Text("Search tracks...") },
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Default.Search, "Search") }

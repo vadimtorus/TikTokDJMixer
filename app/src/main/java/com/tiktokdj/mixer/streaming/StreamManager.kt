@@ -40,6 +40,10 @@ class StreamManager(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var captureJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val byteBufferThreadLocal = object : ThreadLocal<ByteBuffer>() {
+        override fun initialValue(): ByteBuffer =
+            ByteBuffer.allocate(SAMPLE_RATE * 2).order(ByteOrder.LITTLE_ENDIAN)
+    }
 
     suspend fun startTikTokStream(
         clientKey: String,
@@ -138,11 +142,15 @@ class StreamManager(private val context: Context) {
     }
 
     private fun shortsToByteArray(shorts: ShortArray, count: Int): ByteArray {
-        val buffer = ByteBuffer.allocate(count * 2).order(ByteOrder.LITTLE_ENDIAN)
+        val buffer = byteBufferThreadLocal.get()!!
+        buffer.clear()
         for (i in 0 until count) {
             buffer.putShort(shorts[i])
         }
-        return buffer.array()
+        val result = ByteArray(count * 2)
+        buffer.flip()
+        buffer.get(result)
+        return result
     }
 
     suspend fun stopStreaming() {

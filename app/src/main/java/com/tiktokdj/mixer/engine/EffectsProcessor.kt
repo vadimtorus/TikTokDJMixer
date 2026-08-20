@@ -17,9 +17,9 @@ class EffectsProcessor {
     private var flangerPos = 0
     private var flangerPhase = 0f
 
-    fun process(input: FloatArray, sampleRate: Int): FloatArray {
-        if (activeEffects.isEmpty()) return input
+    private var phaserStages = Array(4) { floatArrayOf(0f, 0f) }
 
+    fun process(input: FloatArray, sampleRate: Int): FloatArray {
         var output = input.copyOf()
         synchronized(dspLock) {
             for ((type, effect) in activeEffects) {
@@ -50,6 +50,7 @@ class EffectsProcessor {
         flangerPos = 0
         flangerPhase = 0f
         flangerBuffer.fill(0f)
+        phaserStages = Array(4) { floatArrayOf(0f, 0f) }
     }
 
     fun getActiveEffects(): List<Effect> = activeEffects.values.toList()
@@ -120,6 +121,7 @@ class EffectsProcessor {
             flangerBuffer[flangerPos] = input[i]
 
             flangerPhase += rate / sampleRate
+            if (flangerPhase > 2 * PI.toFloat()) flangerPhase -= (2 * PI).toFloat()
             val modDelay = ((sin(flangerPhase * 2 * PI) * 0.5 + 0.5) * maxDelay).toInt()
 
             val readPos = (flangerPos - modDelay + flangerBuffer.size) % flangerBuffer.size
@@ -131,8 +133,7 @@ class EffectsProcessor {
 
     private fun applyPhaser(input: FloatArray, intensity: Float, sampleRate: Int): FloatArray {
         val output = input.copyOf()
-        val numStages = 4
-        val stages = Array(numStages) { floatArrayOf(0f, 0f) }
+        val numStages = phaserStages.size
         val rate = 0.3f
 
         for (i in output.indices) {
@@ -142,9 +143,9 @@ class EffectsProcessor {
                 val freq = 200 + sin(angle) * 800 * intensity
                 val f = 2 * cos(2 * PI * freq / sampleRate)
 
-                val tmp = sample - stages[s][1] * f * 0.5f + stages[s][0] * 0.5f
-                stages[s][0] = stages[s][1]
-                stages[s][1] = tmp
+                val tmp = sample - phaserStages[s][1] * f * 0.5f + phaserStages[s][0] * 0.5f
+                phaserStages[s][0] = phaserStages[s][1]
+                phaserStages[s][1] = tmp
                 sample = tmp
             }
             output[i] = (input[i] + sample * intensity) / (1 + intensity)

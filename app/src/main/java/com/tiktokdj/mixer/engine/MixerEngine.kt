@@ -7,6 +7,7 @@ import com.tiktokdj.mixer.model.MixerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -65,7 +66,7 @@ class MixerEngine(context: Context) {
         val crossfader = _mixerState.value.crossfader
         val masterVol = _mixerState.value.masterVolume
 
-        val angle = crossfader * Math.PI.toFloat() / 2f
+        val angle = crossfader * PI.toFloat() / 2f
         val volA = masterVol * cos(angle)
         val volB = masterVol * sin(angle)
 
