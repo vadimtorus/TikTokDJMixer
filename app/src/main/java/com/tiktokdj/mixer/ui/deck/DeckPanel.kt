@@ -1,0 +1,274 @@
+package com.tiktokdj.mixer.ui.deck
+
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.tiktokdj.mixer.model.DeckState
+import com.tiktokdj.mixer.model.EQState
+import com.tiktokdj.mixer.utils.AudioUtils
+
+@Composable
+fun DeckPanel(
+    deckId: String,
+    state: DeckState,
+    modifier: Modifier = Modifier,
+    onPlayPause: () -> Unit = {},
+    onSeek: (Long) -> Unit = {},
+    onVolumeChange: (Float) -> Unit = {},
+    onPitchChange: (Float) -> Unit = {},
+    onCue: () -> Unit = {},
+    onHotCue: (Int) -> Unit = {}
+) {
+    val deckColor = when (deckId) {
+        "A" -> Color(0xFFFF6B6B)
+        else -> Color(0xFF4ECDC4)
+    }
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Deck header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "DECK $deckId",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = deckColor
+                )
+
+                if (state.track != null) {
+                    Text(
+                        text = "${state.track.bpm.toInt()} BPM",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Track info
+            state.track?.let { track ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = track.title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = track.artist,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } ?: Text(
+                text = "No track loaded",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Waveform display
+            WaveformDisplay(
+                isPlaying = state.isPlaying,
+                deckColor = deckColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+            )
+
+            // Position display
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = AudioUtils.formatDuration(state.positionMs),
+                    fontSize = 10.sp,
+                    fontFamily = MaterialTheme.typography.bodySmall.fontFamily
+                )
+                state.track?.let {
+                    Text(
+                        text = AudioUtils.formatDuration(it.durationMs),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // Progress bar
+            LinearProgressIndicator(
+                progress = {
+                    val duration = state.track?.durationMs ?: 1L
+                    (state.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)),
+                color = deckColor
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Transport controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onCue) {
+                    Icon(
+                        Icons.Default.Cue,
+                        "Cue",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                IconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(deckColor)
+                ) {
+                    Icon(
+                        if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        "Play/Pause",
+                        tint = Color.White
+                    )
+                }
+
+                IconButton(onClick = { onHotCue(1) }) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Red)
+                    )
+                }
+                IconButton(onClick = { onHotCue(2) }) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Green)
+                    )
+                }
+                IconButton(onClick = { onHotCue(3) }) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.Blue)
+                    )
+                }
+            }
+
+            // Volume slider
+            Text("Volume", fontSize = 10.sp)
+            Slider(
+                value = state.volume,
+                onValueChange = onVolumeChange,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = deckColor,
+                    activeTrackColor = deckColor
+                )
+            )
+
+            // Pitch slider
+            Text("Pitch", fontSize = 10.sp)
+            Slider(
+                value = state.pitch,
+                onValueChange = onPitchChange,
+                valueRange = 0.8f..1.2f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = deckColor,
+                    activeTrackColor = deckColor
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun WaveformDisplay(
+    isPlaying: Boolean,
+    deckColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "waveform")
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "waveformProgress"
+    )
+
+    Canvas(modifier = modifier.background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(4.dp))) {
+        val barCount = 50
+        val barWidth = size.width / barCount
+        val centerY = size.height / 2
+
+        for (i in 0 until barCount) {
+            val height = if (isPlaying) {
+                val phase = (i.toFloat() / barCount + animProgress) % 1f
+                val amplitude = (Math.sin(phase * Math.PI * 4).toFloat() + 1f) / 2f
+                amplitude * size.height * 0.8f
+            } else {
+                (Math.random() * size.height * 0.3f + size.height * 0.1f).toFloat()
+            }
+
+            drawLine(
+                color = deckColor,
+                start = Offset(i * barWidth + barWidth / 2, centerY - height / 2),
+                end = Offset(i * barWidth + barWidth / 2, centerY + height / 2),
+                strokeWidth = barWidth * 0.6f,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // Playhead
+        if (isPlaying) {
+            drawLine(
+                color = Color.White,
+                start = Offset(animProgress * size.width, 0f),
+                end = Offset(animProgress * size.width, size.height),
+                strokeWidth = 2f
+            )
+        }
+    }
+}

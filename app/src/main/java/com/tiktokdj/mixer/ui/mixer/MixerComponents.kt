@@ -1,0 +1,249 @@
+package com.tiktokdj.mixer.ui.mixer
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.tiktokdj.mixer.model.EQState
+import kotlin.math.sin
+
+@Composable
+fun CrossfaderBar(
+    position: Float,
+    onPositionChange: (Float) -> Unit,
+    isSyncEnabled: Boolean,
+    onSyncToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "DECK A",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF6B6B)
+                )
+
+                Button(
+                    onClick = onSyncToggle,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSyncEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Sync,
+                        "Sync",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("SYNC", fontSize = 10.sp)
+                }
+
+                Text(
+                    text = "DECK B",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4ECDC4)
+                )
+            }
+
+            Slider(
+                value = position,
+                onValueChange = onPositionChange,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = Color(0xFF9B59B6),
+                    inactiveTrackColor = Color.LightGray
+                )
+            )
+
+            // Auto-mix button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                OutlinedButton(
+                    onClick = { onPositionChange(0f) },
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("A", fontSize = 10.sp)
+                }
+                OutlinedButton(
+                    onClick = { onPositionChange(0.5f) },
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("MID", fontSize = 10.sp)
+                }
+                OutlinedButton(
+                    onClick = { onPositionChange(1f) },
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("B", fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EQPanel(
+    deckAState: EQState,
+    deckBState: EQState,
+    onEQChangeDeckA: (Float, Float, Float) -> Unit,
+    onEQChangeDeckB: (Float, Float, Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            // Deck A EQ
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    "EQ A",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFF6B6B)
+                )
+
+                EQKnob("HI", deckAState.high) { onEQChangeDeckA(it, deckAState.mid, deckAState.low) }
+                EQKnob("MID", deckAState.mid) { onEQChangeDeckA(deckAState.high, it, deckAState.low) }
+                EQKnob("LOW", deckAState.low) { onEQChangeDeckA(deckAState.high, deckAState.mid, it) }
+            }
+
+            // Vertical divider
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color.Gray.copy(alpha = 0.3f))
+            )
+
+            // Deck B EQ
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    "EQ B",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4ECDC4)
+                )
+
+                EQKnob("HI", deckBState.high) { onEQChangeDeckB(it, deckBState.mid, deckBState.low) }
+                EQKnob("MID", deckBState.mid) { onEQChangeDeckB(deckBState.high, it, deckBState.low) }
+                EQKnob("LOW", deckBState.low) { onEQChangeDeckB(deckBState.high, deckBState.mid, it) }
+            }
+        }
+    }
+}
+
+@Composable
+fun EQKnob(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(4.dp)
+    ) {
+        Text(label, fontSize = 8.sp)
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .width(48.dp)
+                .height(60.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary
+            )
+        )
+    }
+}
+
+@Composable
+fun SpectrumAnalyzer(
+    modifier: Modifier = Modifier
+) {
+    val bands = remember { List(32) { 0f } }
+
+    Canvas(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .padding(8.dp)
+    ) {
+        val barWidth = size.width / bands.size
+        val centerY = size.height / 2
+
+        bands.forEachIndexed { index, amplitude ->
+            val height = amplitude * size.height * 0.8f
+            val x = index * barWidth + barWidth / 4
+
+            // Left channel (top)
+            drawLine(
+                color = Color(0xFF00FF88),
+                start = Offset(x, centerY - height / 2),
+                end = Offset(x, centerY),
+                strokeWidth = barWidth / 2
+            )
+
+            // Right channel (bottom)
+            drawLine(
+                color = Color(0xFFFF6600),
+                start = Offset(x, centerY),
+                end = Offset(x, centerY + height / 2),
+                strokeWidth = barWidth / 2
+            )
+        }
+
+        // Center line
+        drawLine(
+            color = Color.White.copy(alpha = 0.3f),
+            start = Offset(0f, centerY),
+            end = Offset(size.width, centerY),
+            strokeWidth = 1f
+        )
+    }
+}
