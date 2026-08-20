@@ -1,6 +1,5 @@
 package com.tiktokdj.mixer.engine
 
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.*
 
 class SpectralAnalyzer {

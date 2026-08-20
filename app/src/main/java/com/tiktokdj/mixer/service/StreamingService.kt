@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.tiktokdj.mixer.TikTokDJApp
 import com.tiktokdj.mixer.streaming.StreamManager
 import com.tiktokdj.mixer.ui.MainActivity
+import kotlinx.coroutines.*
 
 class StreamingService : Service() {
 
@@ -26,6 +27,7 @@ class StreamingService : Service() {
     }
 
     private var streamManager: StreamManager? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -45,9 +47,11 @@ class StreamingService : Service() {
                 startTikTokStream(clientKey, clientSecret, title)
             }
             ACTION_STOP -> {
-                stopStreaming()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                serviceScope.launch {
+                    stopStreamingInternal()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
         return START_STICKY
@@ -57,10 +61,11 @@ class StreamingService : Service() {
         streamManager = StreamManager(applicationContext)
         val manager = streamManager ?: return
 
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        serviceScope.launch {
             val started = manager.startRTMPStream(rtmpUrl)
             if (!started) {
                 Log.e(TAG, "Failed to start RTMP stream")
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
@@ -70,21 +75,19 @@ class StreamingService : Service() {
         streamManager = StreamManager(applicationContext)
         val manager = streamManager ?: return
 
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        serviceScope.launch {
             val started = manager.startTikTokStream(clientKey, clientSecret, title)
             if (!started) {
                 Log.e(TAG, "Failed to start TikTok stream")
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
     }
 
-    private fun stopStreaming() {
-        val manager = streamManager ?: return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            manager.stopStreaming()
-            streamManager = null
-        }
+    private suspend fun stopStreamingInternal() {
+        streamManager?.stopStreaming()
+        streamManager = null
     }
 
     private fun createNotification(title: String): Notification {
@@ -111,7 +114,8 @@ class StreamingService : Service() {
     }
 
     override fun onDestroy() {
-        stopStreaming()
+        serviceScope.cancel()
+        runBlocking { streamManager?.stopStreaming() }
         super.onDestroy()
     }
 }

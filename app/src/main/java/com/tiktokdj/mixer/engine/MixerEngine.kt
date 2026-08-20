@@ -1,6 +1,8 @@
 package com.tiktokdj.mixer.engine
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.tiktokdj.mixer.model.MixerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,12 +20,16 @@ class MixerEngine(context: Context) {
     val effectsProcessor = EffectsProcessor()
     private val spectralAnalyzer = SpectralAnalyzer()
 
+    private val crossfadeHandler = Handler(Looper.getMainLooper())
+    private val crossfadeRunnables = mutableListOf<Runnable>()
+
     fun initialize() {
         deckA.initialize()
         deckB.initialize()
     }
 
     fun setCrossfader(position: Float) {
+        cancelCrossfade()
         val clamped = position.coerceIn(0f, 1f)
         _mixerState.value = _mixerState.value.copy(crossfader = clamped)
         updateDeckVolumes()
@@ -87,18 +93,26 @@ class MixerEngine(context: Context) {
             val remainingA = deckA.getDurationMs() - stateA.positionMs
             if (remainingA < 15000) {
                 deckB.play()
+                if (_mixerState.value.isSyncEnabled) syncBPM()
                 gradualCrossfade(1f, 5000)
             }
         } else if (!stateA.isPlaying && stateB.isPlaying && deckA.hasTrack()) {
             val remainingB = deckB.getDurationMs() - stateB.positionMs
             if (remainingB < 15000) {
                 deckA.play()
+                if (_mixerState.value.isSyncEnabled) syncBPM()
                 gradualCrossfade(0f, 5000)
             }
         }
     }
 
+    private fun cancelCrossfade() {
+        crossfadeRunnables.forEach { crossfadeHandler.removeCallbacks(it) }
+        crossfadeRunnables.clear()
+    }
+
     private fun gradualCrossfade(target: Float, durationMs: Long) {
+        cancelCrossfade()
         val start = _mixerState.value.crossfader
         val steps = 50
         val stepDelay = durationMs / steps
@@ -107,10 +121,12 @@ class MixerEngine(context: Context) {
             val progress = i.toFloat() / steps
             val position = start + (target - start) * progress
 
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val runnable = Runnable {
                 _mixerState.value = _mixerState.value.copy(crossfader = position)
                 updateDeckVolumes()
-            }, i * stepDelay)
+            }
+            crossfadeRunnables.add(runnable)
+            crossfadeHandler.postDelayed(runnable, i * stepDelay)
         }
     }
 
@@ -142,6 +158,7 @@ class MixerEngine(context: Context) {
     }
 
     fun release() {
+        cancelCrossfade()
         deckA.release()
         deckB.release()
     }

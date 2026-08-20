@@ -148,7 +148,7 @@ class TrackLoader(private val context: Context) {
         var cursor: Cursor? = null
         return try {
             cursor = context.contentResolver.query(uri, projection, null, null, null)
-            cursor?.moveToFirst()
+            if (cursor?.moveToFirst() != true) return null
 
             val id = cursor?.getLong(0) ?: return null
             val title = cursor?.getString(1) ?: "Unknown"

@@ -18,6 +18,7 @@ class RTMPStreamer {
     companion object {
         private const val TAG = "RTMPStreamer"
         private const val RTMP_PORT = 1935
+        private const val RTMP_CHUNK_SIZE = 128
     }
 
     private val _streamState = MutableStateFlow<RTMPState>(RTMPState.Idle)
@@ -30,6 +31,7 @@ class RTMPStreamer {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var transactionId = 0
     private var rtmpUrl: String = ""
+    private var chunkSize = RTMP_CHUNK_SIZE
 
     sealed class RTMPState {
         data object Idle : RTMPState()
@@ -60,6 +62,7 @@ class RTMPStreamer {
 
             performHandshake()
             sendConnect(path, host, port)
+            waitForConnectResponse()
 
             _streamState.value = RTMPState.Connected
             Log.d(TAG, "Connected to RTMP: $host:$port$path")
@@ -87,21 +90,17 @@ class RTMPStreamer {
             c0c1[i] = Random.nextInt(1, 255).toByte()
         }
 
-        withContext(Dispatchers.IO) {
-            dos.write(c0c1)
-            dos.flush()
-        }
+        dos.write(c0c1)
+        dos.flush()
 
         val s0s1 = ByteArray(1537)
-        withContext(Dispatchers.IO) { dis.readFully(s0s1) }
+        dis.readFully(s0s1)
 
-        withContext(Dispatchers.IO) {
-            dos.write(s0s1, 1, 1536)
-            dos.flush()
-        }
+        dos.write(s0s1, 1, 1536)
+        dos.flush()
 
         val s2 = ByteArray(1536)
-        withContext(Dispatchers.IO) { dis.readFully(s2) }
+        dis.readFully(s2)
     }
 
     private suspend fun sendConnect(path: String, host: String, port: Int) {
@@ -117,6 +116,100 @@ class RTMPStreamer {
             writeObjectEnd()
         }
         sendChunk(3, 0x14, 0, amf)
+    }
+
+    private suspend fun waitForConnectResponse() {
+        val dis = inputStream ?: return
+        val dos = outputStream ?: return
+
+        var attempts = 0
+        while (attempts < 10) {
+            val basicHeader = dis.readUnsignedByte()
+            val fmt = (basicHeader shr 6) and 0x03
+            var csid = basicHeader and 0x3F
+
+            if (csid == 0) csid = dis.readUnsignedByte() + 64
+            else if (csid == 1) csid = dis.readUnsignedByte() + dis.readUnsignedByte() * 256 + 64
+
+            val timestamp = dis.readUnsignedByte() shl 16 or
+                    (dis.readUnsignedByte() shl 8) or
+                    dis.readUnsignedByte()
+            val messageLength = dis.readUnsignedByte() shl 16 or
+                    (dis.readUnsignedByte() shl 8) or
+                    dis.readUnsignedByte()
+            val messageType = dis.readUnsignedByte()
+            val messageStreamId = dis.readInt()
+
+            val payload = ByteArray(messageLength)
+            dis.readFully(payload)
+
+            if (messageType == 0x14) {
+                val amfData = ByteBuffer.wrap(payload)
+                val marker = amfData.get().toInt() and 0xFF
+                if (marker == 0x02) {
+                    val strLen = amfData.getShort().toInt() and 0xFFFF
+                    val strBytes = ByteArray(strLen)
+                    amfData.get(strBytes)
+                    val command = String(strBytes)
+                    Log.d(TAG, "Connect response: $command")
+
+                    if (command == "_result") {
+                        amfData.get()
+                        val txId = amfData.double.toInt()
+                        amfData.get()
+                        val properties = readAMF0Object(amfData)
+                        val chunkSizeServer = properties["chunkSize"] as? Double
+                        if (chunkSizeServer != null) {
+                            chunkSize = chunkSizeServer.toInt()
+                            setChunkSize(chunkSize)
+                        }
+                        return
+                    } else if (command == "_error") {
+                        throw IOException("RTMP connect rejected by server")
+                    }
+                }
+            }
+            attempts++
+        }
+        Log.w(TAG, "Connect response timeout, proceeding anyway")
+    }
+
+    private fun readAMF0Object(buffer: ByteBuffer): Map<String, Any> {
+        val map = mutableMapOf<String, Any>()
+        while (buffer.hasRemaining()) {
+            val keyLen = buffer.short.toInt() and 0xFFFF
+            if (keyLen == 0) break
+            val keyBytes = ByteArray(keyLen)
+            buffer.get(keyBytes)
+            val key = String(keyBytes)
+            val type = buffer.get().toInt() and 0xFF
+            when (type) {
+                0x00 -> map[key] = buffer.double
+                0x01 -> map[key] = (buffer.get().toInt() == 1)
+                0x02 -> {
+                    val len = buffer.short.toInt() and 0xFFFF
+                    val bytes = ByteArray(len)
+                    buffer.get(bytes)
+                    map[key] = String(bytes)
+                }
+                0x03 -> map[key] = readAMF0Object(buffer)
+                else -> return map
+            }
+            val endMarker = buffer.short.toInt() and 0xFFFF
+            if (endMarker == 0x00 && buffer.hasRemaining()) {
+                val objEnd = buffer.get().toInt() and 0xFF
+                if (objEnd == 0x09) break
+            }
+        }
+        return map
+    }
+
+    private fun setChunkSize(size: Int) {
+        transactionId++
+        val amf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
+        amf.putInt(size)
+        sendChunk(2, 0x01, 0, amf.array())
+        chunkSize = size
     }
 
     fun startStreaming(): Boolean {
@@ -141,35 +234,45 @@ class RTMPStreamer {
     }
 
     private fun buildFLVAudioTag(pcmData: ByteArray): ByteArray {
-        val buffer = ByteBuffer.allocate(2 + pcmData.size).order(ByteOrder.BIG_ENDIAN)
-        buffer.put(0xAF.toByte())
-        buffer.put(0x01.toByte())
-        buffer.put(pcmData)
-        return buffer.array()
+        val flvData = ByteArray(2 + pcmData.size)
+        flvData[0] = 0xAF.toByte()
+        flvData[1] = 0x01.toByte()
+        pcmData.copyInto(flvData, 2)
+        return flvData
     }
 
     private fun sendChunk(chunkStreamId: Int, typeId: Int, timestamp: Int, data: ByteArray) {
         val dos = outputStream ?: return
 
-        val fmt = 0
         val csid = chunkStreamId and 0x3F
-        val firstByte = (fmt shl 6) or csid
         val tsField = timestamp.coerceAtMost(0xFFFFFF)
 
-        val header = ByteBuffer.allocate(11).order(ByteOrder.BIG_ENDIAN)
-        header.put(firstByte.toByte())
-        header.put(((tsField shr 16) and 0xFF).toByte())
-        header.put(((tsField shr 8) and 0xFF).toByte())
-        header.put((tsField and 0xFF).toByte())
-        header.put(((data.size shr 16) and 0xFF).toByte())
-        header.put(((data.size shr 8) and 0xFF).toByte())
-        header.put((data.size and 0xFF).toByte())
-        header.put(typeId.toByte())
-        header.putInt(0)
+        val totalChunks = (data.size + chunkSize - 1) / chunkSize
 
         synchronized(dos) {
-            dos.write(header.array())
-            dos.write(data)
+            for (chunkIndex in 0 until totalChunks) {
+                val offset = chunkIndex * chunkSize
+                val remaining = minOf(chunkSize, data.size - offset)
+
+                if (chunkIndex == 0) {
+                    val header = ByteBuffer.allocate(11).order(ByteOrder.BIG_ENDIAN)
+                    header.put(((0 shl 6) or csid).toByte())
+                    header.put(((tsField shr 16) and 0xFF).toByte())
+                    header.put(((tsField shr 8) and 0xFF).toByte())
+                    header.put((tsField and 0xFF).toByte())
+                    header.put(((data.size shr 16) and 0xFF).toByte())
+                    header.put(((data.size shr 8) and 0xFF).toByte())
+                    header.put((data.size and 0xFF).toByte())
+                    header.put(typeId.toByte())
+                    header.putInt(0)
+                    dos.write(header.array())
+                } else {
+                    val header = ByteBuffer.allocate(1).order(ByteOrder.BIG_ENDIAN)
+                    header.put(((3 shl 6) or csid).toByte())
+                    dos.write(header.array())
+                }
+                dos.write(data, offset, remaining)
+            }
             dos.flush()
         }
     }

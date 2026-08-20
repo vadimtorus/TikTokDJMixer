@@ -7,10 +7,10 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 
 class TikTokLiveStreamer(private val context: Context) {
 
@@ -42,14 +42,13 @@ class TikTokLiveStreamer(private val context: Context) {
     }
 
     suspend fun authenticate(clientKey: String, clientSecret: String): Boolean {
+        var connection: HttpURLConnection? = null
         return try {
             _streamState.value = StreamState.Initializing
 
-            val encodedKey = URLEncoder.encode(clientKey, "UTF-8")
-            val encodedSecret = URLEncoder.encode(clientSecret, "UTF-8")
-            val params = "client_key=$encodedKey&client_secret=$encodedSecret&grant_type=client_credentials"
+            val params = "client_key=$clientKey&client_secret=$clientSecret&grant_type=client_credentials"
 
-            val connection = URL(TIKTOK_AUTH_URL).openConnection() as HttpURLConnection
+            connection = URL(TIKTOK_AUTH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
@@ -58,8 +57,10 @@ class TikTokLiveStreamer(private val context: Context) {
 
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
-                val token = extractJsonField(response, "access_token")
-                if (token != null) {
+                val json = JSONObject(response)
+                val data = json.optJSONObject("data")
+                val token = data?.optString("access_token")
+                if (!token.isNullOrEmpty()) {
                     accessToken = token
                     Log.d(TAG, "Authenticated successfully")
                     true
@@ -68,7 +69,6 @@ class TikTokLiveStreamer(private val context: Context) {
                     false
                 }
             } else {
-                val error = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
                 _streamState.value = StreamState.Error("Auth failed: ${connection.responseCode}")
                 false
             }
@@ -76,6 +76,8 @@ class TikTokLiveStreamer(private val context: Context) {
             Log.e(TAG, "Authentication error", e)
             _streamState.value = StreamState.Error("Auth error: ${e.message}")
             false
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -84,34 +86,31 @@ class TikTokLiveStreamer(private val context: Context) {
         quality: String = "720p",
         region: String = ""
     ): Boolean {
+        var connection: HttpURLConnection? = null
         return try {
             _streamState.value = StreamState.Initializing
 
-            val encodedTitle = URLEncoder.encode(title, "UTF-8")
-            val encodedQuality = URLEncoder.encode(quality, "UTF-8")
-
-            val body = buildString {
-                append("{\"title\":\"$encodedTitle\",\"quality\":\"$encodedQuality\"")
-                if (region.isNotEmpty()) {
-                    val encodedRegion = URLEncoder.encode(region, "UTF-8")
-                    append(",\"region\":\"$encodedRegion\"")
-                }
-                append("}")
+            val jsonBody = JSONObject().apply {
+                put("title", title)
+                put("quality", quality)
+                if (region.isNotEmpty()) put("region", region)
             }
 
-            val connection = URL(TIKTOK_LIVE_INIT_URL).openConnection() as HttpURLConnection
+            connection = URL(TIKTOK_LIVE_INIT_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
-            OutputStreamWriter(connection.outputStream).use { it.write(body) }
+            OutputStreamWriter(connection.outputStream).use { it.write(jsonBody.toString()) }
 
             if (connection.responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().readText()
-                streamServerUrl = extractJsonField(response, "server_url") ?: ""
-                streamKey = extractJsonField(response, "stream_key") ?: ""
-                roomId = extractJsonField(response, "room_id") ?: ""
+                val json = JSONObject(response)
+                val data = json.optJSONObject("data")
+                streamServerUrl = data?.optString("server_url") ?: ""
+                streamKey = data?.optString("stream_key") ?: ""
+                roomId = data?.optString("room_id") ?: ""
 
                 if (streamServerUrl.isNotEmpty() && streamKey.isNotEmpty()) {
                     _streamState.value = StreamState.Connected(streamServerUrl, roomId)
@@ -130,14 +129,16 @@ class TikTokLiveStreamer(private val context: Context) {
             Log.e(TAG, "Init live stream error", e)
             _streamState.value = StreamState.Error("Init error: ${e.message}")
             false
+        } finally {
+            connection?.disconnect()
         }
     }
 
     suspend fun pushStreamData(audioData: ByteArray): Boolean {
         if (_streamState.value !is StreamState.Streaming) return false
+        var connection: HttpURLConnection? = null
         return try {
-            val url = URL("$TIKTOK_LIVE_PUSH_URL?room_id=$roomId")
-            val connection = url.openConnection() as HttpURLConnection
+            connection = URL("$streamServerUrl/push?room_id=$roomId").openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.setRequestProperty("Content-Type", "audio/aac")
@@ -148,6 +149,8 @@ class TikTokLiveStreamer(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Push stream data error", e)
             false
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -165,9 +168,10 @@ class TikTokLiveStreamer(private val context: Context) {
         streamingJob?.cancel()
         streamingJob = null
 
+        var connection: HttpURLConnection? = null
         return try {
-            val body = """{"room_id":"$roomId"}"""
-            val connection = URL(TIKTOK_LIVE_FINISH_URL).openConnection() as HttpURLConnection
+            val body = JSONObject().apply { put("room_id", roomId) }.toString()
+            connection = URL(TIKTOK_LIVE_FINISH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.setRequestProperty("Content-Type", "application/json")
@@ -175,13 +179,16 @@ class TikTokLiveStreamer(private val context: Context) {
 
             OutputStreamWriter(connection.outputStream).use { it.write(body) }
 
+            val responseCode = connection.responseCode
             _streamState.value = StreamState.Finished
-            Log.d(TAG, "Streaming stopped")
-            true
+            Log.d(TAG, "Streaming stopped (HTTP $responseCode)")
+            responseCode == 200
         } catch (e: Exception) {
             Log.e(TAG, "Stop streaming error", e)
             _streamState.value = StreamState.Error("Stop error: ${e.message}")
             false
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -190,10 +197,5 @@ class TikTokLiveStreamer(private val context: Context) {
     fun cleanup() {
         streamingJob?.cancel()
         scope.cancel()
-    }
-
-    private fun extractJsonField(json: String, field: String): String? {
-        val pattern = """"$field"\s*:\s*"([^"]+)"""".toRegex()
-        return pattern.find(json)?.groupValues?.get(1)
     }
 }

@@ -48,7 +48,7 @@ jobs:
           await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            title: `🔔 New version available: v${context.payload.outputs.latest_version}`,
+            title: `🔔 New version available: v${{ steps.check.outputs.latest_version }}`,
             body: `## Update Available\n\nCurrent version: ${{ steps.version.outputs.current }}\nLatest version: ${{ steps.check.outputs.latest_version }}\n\nPlease update to the latest version.`,
             labels: ['update', 'auto-generated']
           });

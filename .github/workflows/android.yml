@@ -66,10 +66,14 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Decode Keystore
+      if: env.SIGNING_STORE_FILE != ''
+      run: echo "${{ secrets.SIGNING_STORE_FILE }}" | base64 -d > app/release.keystore
+
     - name: Build Release APK
       run: ./gradlew assembleRelease
       env:
-        SIGNING_STORE_FILE: ${{ secrets.SIGNING_STORE_FILE }}
+        SIGNING_STORE_FILE: app/release.keystore
         SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
         SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
@@ -81,7 +85,7 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ steps.version.outputs.version }}
         name: Release v${{ steps.version.outputs.version }}

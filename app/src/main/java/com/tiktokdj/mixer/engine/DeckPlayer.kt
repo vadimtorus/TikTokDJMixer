@@ -45,7 +45,7 @@ class DeckPlayer(
                     isPlaying = player.isPlaying
                 )
             }
-            if (exoPlayer != null) {
+            if (exoPlayer != null && _state.value.isPlaying) {
                 handler.postDelayed(this, 50)
             }
         }
@@ -58,6 +58,9 @@ class DeckPlayer(
     }
 
     fun loadTrack(track: Track) {
+        if (exoPlayer?.isPlaying == true) {
+            exoPlayer?.stop()
+        }
         currentTrack = track
         val mediaItem = MediaItem.fromUri(Uri.parse(track.uri))
         exoPlayer?.apply {
@@ -70,7 +73,6 @@ class DeckPlayer(
             isPlaying = false
         )
         handler.removeCallbacks(positionUpdater)
-        handler.post(positionUpdater)
     }
 
     fun play() {
@@ -98,8 +100,8 @@ class DeckPlayer(
 
     fun setVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
-        exoPlayer?.volume = clamped
         _state.value = _state.value.copy(volume = clamped)
+        applyVolume()
     }
 
     fun setPitch(pitch: Float) {
@@ -113,12 +115,17 @@ class DeckPlayer(
         val clampedMid = mid.coerceIn(0f, 1f)
         val clampedHigh = high.coerceIn(0f, 1f)
 
-        val volumeScale = (clampedLow + clampedMid + clampedHigh) / 3f
-        exoPlayer?.volume = _state.value.volume * volumeScale
-
         _state.value = _state.value.copy(
             eq = EQState(low = clampedLow, mid = clampedMid, high = clampedHigh)
         )
+        applyVolume()
+    }
+
+    private fun applyVolume() {
+        val s = _state.value
+        val eq = s.eq
+        val eqScale = (eq.low + eq.mid + eq.high) / 1.5f
+        exoPlayer?.volume = s.volume * eqScale.coerceIn(0f, 1f)
     }
 
     fun setCuePoint() {

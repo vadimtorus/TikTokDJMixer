@@ -8,11 +8,11 @@ import kotlin.math.*
 class EffectsProcessor {
 
     private val activeEffects = ConcurrentHashMap<EffectType, Effect>()
-    private val delayBuffer = FloatArray(48000)
-    private var delayWritePos = 0
-    private val delayMaxSamples = 48000
 
-    private val flangerBuffer = FloatArray(48000)
+    private var delayBuffer = FloatArray(96000)
+    private var delayWritePos = 0
+
+    private var flangerBuffer = FloatArray(96000)
     private var flangerPos = 0
     private var flangerPhase = 0f
 
@@ -135,8 +135,9 @@ class EffectsProcessor {
         for (i in output.indices) {
             var sample = output[i]
             for (s in 0 until numStages) {
-                val freq = 200 + sin(i * rate / sampleRate * 2 * PI + s * PI / 4) * 800 * intensity
-                val f = 2 * cos(freq * 2 * PI / sampleRate)
+                val angle = rate * i / sampleRate * 2 * PI + s * PI / 4
+                val freq = 200 + sin(angle) * 800 * intensity
+                val f = 2 * cos(2 * PI * freq / sampleRate)
 
                 val tmp = sample - stages[s][1] * f * 0.5f + stages[s][0] * 0.5f
                 stages[s][0] = stages[s][1]
@@ -200,15 +201,15 @@ class EffectsProcessor {
 
     private fun applyDelay(input: FloatArray, intensity: Float, sampleRate: Int): FloatArray {
         val delayMs = 100 + intensity * 500
-        val delaySamples = (delayMs * sampleRate / 1000).toInt()
+        val delaySamples = (delayMs * sampleRate / 1000).toInt().coerceAtMost(delayBuffer.size - 1)
         val feedback = intensity * 0.6f
         val output = FloatArray(input.size)
 
         for (i in input.indices) {
-            val readPos = (delayWritePos - delaySamples + delayMaxSamples) % delayMaxSamples
+            val readPos = (delayWritePos - delaySamples + delayBuffer.size) % delayBuffer.size
             val delayed = delayBuffer[readPos]
             delayBuffer[delayWritePos] = input[i] + delayed * feedback
-            delayWritePos = (delayWritePos + 1) % delayMaxSamples
+            delayWritePos = (delayWritePos + 1) % delayBuffer.size
             output[i] = (input[i] + delayed * intensity * 0.5f).coerceIn(-1f, 1f)
         }
 

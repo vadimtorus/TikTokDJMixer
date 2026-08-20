@@ -13,7 +13,7 @@ class BPMDetector {
         val onsetStrength = computeOnsetStrength(audioData, sampleRate)
         if (onsetStrength.isEmpty()) return 0f
 
-        val autocorrelation = computeAutocorrelation(onsetStrength)
+        val autocorrelation = computeAutocorrelation(onsetStrength, sampleRate)
         val bpm = estimateBPMFromAutocorrelation(autocorrelation, sampleRate)
 
         return refineBPM(bpm, audioData, sampleRate)
@@ -62,9 +62,9 @@ class BPMDetector {
         return spectrum
     }
 
-    private fun computeAutocorrelation(data: FloatArray): FloatArray {
+    private fun computeAutocorrelation(data: FloatArray, sampleRate: Int): FloatArray {
         val n = data.size
-        val fps = 44100f / 512
+        val fps = sampleRate.toFloat() / 512
         val minLag = (60.0 * fps / maxBPM).toInt().coerceAtLeast(1)
         val maxLag = (60.0 * fps / minBPM).toInt().coerceAtMost(n)
         val result = FloatArray(maxLag + 1)

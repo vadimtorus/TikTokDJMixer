@@ -52,7 +52,7 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                EffectButton(EffectType.ECHO, "Echo", Icons.DefaultgraphicEq, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.ECHO, "Echo", Icons.Default.GraphicEq, activeEffects, ::toggleEffect, Modifier.weight(1f))
                 EffectButton(EffectType.REVERB, "Reverb", Icons.Default.Waves, activeEffects, ::toggleEffect, Modifier.weight(1f))
                 EffectButton(EffectType.DELAY, "Delay", Icons.Default.Timer, activeEffects, ::toggleEffect, Modifier.weight(1f))
             }

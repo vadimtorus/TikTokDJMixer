@@ -1,14 +1,21 @@
 package com.tiktokdj.mixer.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.tiktokdj.mixer.audio.TrackLoader
 import com.tiktokdj.mixer.engine.MixerEngine
-import com.tiktokdj.mixer.model.EffectType
+import com.tiktokdj.mixer.model.MixerState
+import com.tiktokdj.mixer.model.Track
 import com.tiktokdj.mixer.streaming.StreamManager
 import com.tiktokdj.mixer.ui.deck.DeckPanel
 import com.tiktokdj.mixer.ui.effects.EffectsPanel
@@ -17,6 +24,10 @@ import com.tiktokdj.mixer.ui.mixer.EQPanel
 import com.tiktokdj.mixer.ui.mixer.SpectrumAnalyzer
 import com.tiktokdj.mixer.ui.stream.StreamPanel
 import com.tiktokdj.mixer.updater.AppUpdater
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +92,11 @@ fun DJMixerApp(
 }
 
 @Composable
-fun MixerScreen(mixerEngine: MixerEngine, mixerState: com.tiktokdj.mixer.model.MixerState) {
+fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
     LaunchedEffect(Unit) {
         while (true) {
             mixerEngine.updateMixerState()
-            kotlinx.coroutines.delay(100)
+            delay(100)
         }
     }
 
@@ -160,11 +171,10 @@ fun StreamScreen(streamManager: StreamManager) {
 @Composable
 fun LibraryScreen(mixerEngine: MixerEngine) {
     var searchQuery by remember { mutableStateOf("") }
-    var tracks by remember { mutableStateOf(emptyList<com.tiktokdj.mixer.model.Track>()) }
+    var tracks by remember { mutableStateOf(emptyList<Track>()) }
     var isLoading by remember { mutableStateOf(false) }
-    val trackLoader = remember { com.tiktokdj.mixer.audio.TrackLoader(
-        androidx.compose.ui.platform.LocalContext.current.applicationContext
-    ) }
+    val trackLoader = remember { TrackLoader(LocalContext.current.applicationContext) }
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -174,9 +184,13 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
             value = searchQuery,
             onValueChange = {
                 searchQuery = it
-                isLoading = true
-                tracks = trackLoader.searchTracks(it)
-                isLoading = false
+                coroutineScope.launch {
+                    isLoading = true
+                    tracks = withContext(Dispatchers.IO) {
+                        trackLoader.searchTracks(it)
+                    }
+                    isLoading = false
+                }
             },
             label = { Text("Search tracks...") },
             modifier = Modifier.fillMaxWidth(),
@@ -191,7 +205,7 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(tracks) { track ->
+            items(tracks, key = { it.id }) { track ->
                 ListItem(
                     headlineContent = { Text(track.title) },
                     supportingContent = { Text(track.artist) },
@@ -199,7 +213,15 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
                     leadingContent = {
                         Icon(Icons.Default.MusicNote, "Track")
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (mixerEngine.deckA.hasTrack().not()) {
+                                mixerEngine.deckA.loadTrack(track)
+                            } else {
+                                mixerEngine.deckB.loadTrack(track)
+                            }
+                        }
                 )
             }
         }

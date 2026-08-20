@@ -10,7 +10,6 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// DJ-specific colors
 val DeckAColor = Color(0xFFFF6B6B)
 val DeckBColor = Color(0xFF4ECDC4)
 val MasterColor = Color(0xFFFFE66D)

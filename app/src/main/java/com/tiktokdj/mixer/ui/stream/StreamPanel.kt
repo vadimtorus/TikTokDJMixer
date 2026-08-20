@@ -16,7 +16,9 @@ import androidx.compose.ui.unit.sp
 import com.tiktokdj.mixer.model.StreamMethod
 import com.tiktokdj.mixer.model.StreamResolution
 import com.tiktokdj.mixer.streaming.StreamManager
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamPanel(streamManager: StreamManager) {
     var selectedMethod by remember { mutableStateOf(StreamMethod.RTMP) }
@@ -29,8 +31,8 @@ fun StreamPanel(streamManager: StreamManager) {
     var enableMicrophone by remember { mutableStateOf(false) }
 
     val isStreaming by streamManager.isStreaming.collectAsState()
-    var isStarting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    var isStarting by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -131,7 +133,7 @@ fun StreamPanel(streamManager: StreamManager) {
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(modifier = Modifier.size(12.dp).background(Color.Red, RoundedCornerShape(6.dp)))
+                    Box(modifier = Modifier.size(12.dp).background(Color.Red, RoundedCornerShape(6.dp))) {}
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("LIVE", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE74C3C))
                 }
@@ -141,12 +143,28 @@ fun StreamPanel(streamManager: StreamManager) {
         Button(
             onClick = {
                 if (isStreaming) {
-                    isStarting = false
+                    scope.launch {
+                        streamManager.stopStreaming()
+                    }
                 } else {
                     isStarting = true
+                    scope.launch {
+                        when (selectedMethod) {
+                            StreamMethod.RTMP -> {
+                                streamManager.startRTMPStream(rtmpUrl)
+                            }
+                            StreamMethod.TIKTOK_LIVE_API -> {
+                                streamManager.startTikTokStream(
+                                    tiktokClientKey, tiktokClientSecret, streamTitle
+                                )
+                            }
+                        }
+                        isStarting = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !isStarting && (isStreaming || (if (selectedMethod == StreamMethod.RTMP) rtmpUrl.isNotBlank() else tiktokClientKey.isNotBlank() && tiktokClientSecret.isNotBlank())),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isStreaming) Color(0xFFE74C3C) else Color(0xFF2ECC71)
             ),
@@ -159,7 +177,11 @@ fun StreamPanel(streamManager: StreamManager) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (isStreaming) "STOP STREAM" else "START STREAM",
+                text = when {
+                    isStarting -> "STARTING..."
+                    isStreaming -> "STOP STREAM"
+                    else -> "START STREAM"
+                },
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )

@@ -16,7 +16,8 @@
 
 # Ktor
 -dontwarn io.ktor.**
--keep class io.ktor.** { *; }
+-keep class io.ktor.client.engine.** { *; }
+-keep class io.ktor.serialization.** { *; }
 
 # Room
 -keep class * extends androidx.room.RoomDatabase
@@ -37,11 +38,9 @@
 -keep class com.bumptech.glide.load.data.ParcelFileDescriptorRewinder$InternalRewinder { *** rewind(); }
 
 # Media3 / ExoPlayer
--keep class androidx.media3.** { *; }
+-keep class androidx.media3.exoplayer.** { *; }
+-keep class androidx.media3.common.** { *; }
 -dontwarn androidx.media3.**
 
 # App models
 -keep class com.tiktokdj.mixer.model.** { *; }
-
-# AAC encoder
--keep class net.sourceforge.aacenc.** { *; }
