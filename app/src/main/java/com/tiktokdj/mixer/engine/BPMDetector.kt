@@ -1,15 +1,11 @@
 package com.tiktokdj.mixer.engine
 
-import kotlin.math.abs
-import kotlin.math.floor
-import kotlin.math.sqrt
+import kotlin.math.*
 
 class BPMDetector {
 
     private val minBPM = 60f
     private val maxBPM = 200f
-    private val onsetThreshold = 0.3f
-    private val correlationWindowSize = 4096
 
     fun detectBPM(audioData: FloatArray, sampleRate: Int): Float {
         if (audioData.isEmpty()) return 0f
@@ -18,7 +14,7 @@ class BPMDetector {
         if (onsetStrength.isEmpty()) return 0f
 
         val autocorrelation = computeAutocorrelation(onsetStrength)
-        val bpm = estimateBPMFromAutocorrelation(autocorrelation, sampleRate, onsetStrength.size)
+        val bpm = estimateBPMFromAutocorrelation(autocorrelation, sampleRate)
 
         return refineBPM(bpm, audioData, sampleRate)
     }
@@ -57,9 +53,9 @@ class BPMDetector {
             var real = 0f
             var imag = 0f
             for (i in 0 until n) {
-                val angle = (2.0 * Math.PI * k * i / n).toFloat()
-                real += frame[i] * kotlin.math.cos(angle)
-                imag -= frame[i] * kotlin.math.sin(angle)
+                val angle = (2.0 * PI * k * i / n).toFloat()
+                real += frame[i] * cos(angle)
+                imag -= frame[i] * sin(angle)
             }
             spectrum[k] = sqrt(real * real + imag * imag) / n
         }
@@ -68,15 +64,17 @@ class BPMDetector {
 
     private fun computeAutocorrelation(data: FloatArray): FloatArray {
         val n = data.size
-        val maxLag = (60.0 * data.size / (25.0)).toInt().coerceAtMost(n)
-        val result = FloatArray(maxLag)
+        val fps = 44100f / 512
+        val minLag = (60.0 * fps / maxBPM).toInt().coerceAtLeast(1)
+        val maxLag = (60.0 * fps / minBPM).toInt().coerceAtMost(n)
+        val result = FloatArray(maxLag + 1)
 
         val mean = data.average().toFloat()
         val variance = data.map { (it - mean) * (it - mean) }.average().toFloat()
 
         if (variance < 1e-10f) return result
 
-        for (lag in 0 until maxLag) {
+        for (lag in minLag..maxLag) {
             var sum = 0f
             for (i in 0 until n - lag) {
                 sum += (data[i] - mean) * (data[i + lag] - mean)
@@ -88,8 +86,7 @@ class BPMDetector {
 
     private fun estimateBPMFromAutocorrelation(
         autocorr: FloatArray,
-        sampleRate: Int,
-        frameCount: Int
+        sampleRate: Int
     ): Float {
         val fps = sampleRate.toFloat() / 512
         var bestBPM = 0f
@@ -143,7 +140,7 @@ class BPMDetector {
             }
         }
 
-        return floor(bestBPM).toFloat()
+        return (bestBPM * 10).roundToInt() / 10f
     }
 
     private fun normalize(data: FloatArray): FloatArray {

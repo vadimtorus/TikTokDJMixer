@@ -1,11 +1,13 @@
 package com.tiktokdj.mixer.engine
 
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.*
 
 class SpectralAnalyzer {
 
     private val fftSize = 2048
     private val numBands = 32
+    @Volatile
     private var currentSpectrum = FloatArray(numBands)
 
     fun analyze(frame: FloatArray): FloatArray {
@@ -13,13 +15,11 @@ class SpectralAnalyzer {
         frame.copyInto(paddedFrame, 0, 0, minOf(frame.size, fftSize))
 
         val windowed = applyHannWindow(paddedFrame)
-        val fftResult = fft(windowed)
+        val (real, imag) = fftReal(windowed)
 
         val magnitudes = FloatArray(fftSize / 2)
         for (i in magnitudes.indices) {
-            val real = fftResult[2 * i]
-            val imag = fftResult[2 * i + 1]
-            magnitudes[i] = sqrt(real * real + imag * imag) / fftSize
+            magnitudes[i] = sqrt(real[i] * real[i] + imag[i] * imag[i]) / fftSize
         }
 
         currentSpectrum = downsampleToBands(magnitudes)
@@ -47,44 +47,68 @@ class SpectralAnalyzer {
         }
     }
 
-    private fun fft(data: FloatArray): FloatArray {
-        val n = data.size
-        if (n == 1) return floatArrayOf(data[0], 0f)
+    private fun fftReal(input: FloatArray): Pair<FloatArray, FloatArray> {
+        val n = input.size
+        val real = FloatArray(n)
+        val imag = FloatArray(n)
+        input.copyInto(real)
 
-        if (n % 2 != 0) {
-            val padded = FloatArray(n + 1)
-            data.copyInto(padded)
-            return fft(padded)
+        fftInPlace(real, imag)
+
+        return Pair(real, imag)
+    }
+
+    private fun fftInPlace(real: FloatArray, imag: FloatArray) {
+        val n = real.size
+        if (n == 0) return
+
+        var j = 0
+        for (i in 0 until n - 1) {
+            if (i < j) {
+                var temp = real[i]; real[i] = real[j]; real[j] = temp
+                temp = imag[i]; imag[i] = imag[j]; imag[j] = temp
+            }
+            var k = n / 2
+            while (k <= j) {
+                j -= k
+                k /= 2
+            }
+            j += k
         }
 
-        val even = FloatArray(n / 2)
-        val odd = FloatArray(n / 2)
-        for (i in 0 until n / 2) {
-            even[2 * i] = data[2 * i]
-            even[2 * i + 1] = data[2 * i + 1]
-            odd[2 * i] = data[2 * i + 2]
-            odd[2 * i + 1] = data[2 * i + 3]
+        var len = 2
+        while (len <= n) {
+            val halfLen = len / 2
+            val angle = -2.0 * PI / len
+            val wReal = cos(angle).toFloat()
+            val wImag = sin(angle).toFloat()
+
+            var i = 0
+            while (i < n) {
+                var curReal = 1.0f
+                var curImag = 0.0f
+
+                for (jj in 0 until halfLen) {
+                    val uIdx = i + jj
+                    val vIdx = i + jj + halfLen
+
+                    val tReal = curReal * real[vIdx] - curImag * imag[vIdx]
+                    val tImag = curReal * imag[vIdx] + curImag * real[vIdx]
+
+                    real[vIdx] = real[uIdx] - tReal
+                    imag[vIdx] = imag[uIdx] - tImag
+                    real[uIdx] += tReal
+                    imag[uIdx] += tImag
+
+                    val newReal = curReal * wReal - curImag * wImag
+                    val newImag = curReal * wImag + curImag * wReal
+                    curReal = newReal
+                    curImag = newImag
+                }
+                i += len
+            }
+            len *= 2
         }
-
-        val evenFFT = fft(even)
-        val oddFFT = fft(odd)
-        val result = FloatArray(n)
-
-        for (k in 0 until n / 2) {
-            val angle = -2.0 * PI * k / n
-            val cosA = cos(angle).toFloat()
-            val sinA = sin(angle).toFloat()
-
-            val tReal = cosA * oddFFT[2 * k] - sinA * oddFFT[2 * k + 1]
-            val tImag = sinA * oddFFT[2 * k] + cosA * oddFFT[2 * k + 1]
-
-            result[2 * k] = evenFFT[2 * k] + tReal
-            result[2 * k + 1] = evenFFT[2 * k + 1] + tImag
-            result[2 * k + n] = evenFFT[2 * k] - tReal
-            result[2 * k + n + 1] = evenFFT[2 * k + 1] - tImag
-        }
-
-        return result
     }
 
     private fun downsampleToBands(magnitudes: FloatArray): FloatArray {

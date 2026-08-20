@@ -1,13 +1,12 @@
 package com.tiktokdj.mixer.updater
 
 import android.app.DownloadManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.database.Cursor
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.util.Log
 import com.tiktokdj.mixer.model.AppVersion
@@ -27,8 +26,7 @@ class AppUpdater(private val context: Context) {
     companion object {
         private const val TAG = "AppUpdater"
         private const val GITHUB_API_URL = "https://api.github.com/repos"
-        private const val RELEASES_ENDPOINT = "/releases/latest"
-        private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L // 6 hours
+        private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -37,6 +35,7 @@ class AppUpdater(private val context: Context) {
     private var checkJob: Job? = null
     private var downloadId: Long = -1
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var receiverRegistered = false
 
     sealed class UpdateState {
         data object Idle : UpdateState()
@@ -50,7 +49,7 @@ class AppUpdater(private val context: Context) {
     }
 
     private val downloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
+        override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                 if (id == downloadId) {
@@ -62,6 +61,12 @@ class AppUpdater(private val context: Context) {
     }
 
     fun startPeriodicCheck(owner: String, repo: String) {
+        if (!receiverRegistered) {
+            val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+            context.registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            receiverRegistered = true
+        }
+
         checkJob?.cancel()
         checkJob = scope.launch {
             while (isActive) {
@@ -75,7 +80,7 @@ class AppUpdater(private val context: Context) {
         return try {
             _updateState.value = UpdateState.Checking
 
-            val url = URL("$GITHUB_API_URL/$owner/$repo$RELEASES_ENDPOINT")
+            val url = URL("$GITHUB_API_URL/$owner/$repo/releases/latest")
             val connection = url.openConnection() as HttpURLConnection
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
             connection.connectTimeout = 10000
@@ -100,13 +105,10 @@ class AppUpdater(private val context: Context) {
             val json = JSONObject(response)
             val tagName = json.getString("tag_name").trimStart('v', 'V')
             val version = AppVersion.parse(tagName)
-
             val currentVersion = getCurrentVersion()
 
             if (version.isNewerThan(currentVersion)) {
                 val body = json.optString("body", "")
-                val isPrerelease = json.optBoolean("prerelease", false)
-
                 val assets = json.getJSONArray("assets")
                 var downloadUrl = ""
 
@@ -148,23 +150,19 @@ class AppUpdater(private val context: Context) {
         _updateState.value = UpdateState.Downloading
 
         val request = DownloadManager.Request(Uri.parse(downloadUrl))
-            .setTitle("Загрузка обновления")
-            .setDescription("Загрузка новой версии приложения")
+            .setTitle("Downloading update")
+            .setDescription("Downloading new app version")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(
-                Environment.DIRECTORY_DOWNLOADS,
-                "TikTokDJMixer-update.apk"
-            )
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "TikTokDJMixer-update.apk")
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         downloadId = downloadManager.enqueue(request)
 
-        // Monitor download progress
         scope.launch {
             var downloading = true
-            while (downloading) {
+            while (downloading && isActive) {
                 val query = DownloadManager.Query().setFilterById(downloadId)
                 val cursor: Cursor? = downloadManager.query(query)
 
@@ -190,16 +188,15 @@ class AppUpdater(private val context: Context) {
     }
 
     private fun installUpdate() {
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val uri = downloadManager.getUriForDownloadedFile(downloadId)
-
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
         try {
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val uri = downloadManager.getUriForDownloadedFile(downloadId)
+
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             context.startActivity(installIntent)
         } catch (e: Exception) {
             Log.e(TAG, "Install error", e)
@@ -218,6 +215,14 @@ class AppUpdater(private val context: Context) {
 
     fun cleanup() {
         checkJob?.cancel()
+        if (receiverRegistered) {
+            try {
+                context.unregisterReceiver(downloadReceiver)
+            } catch (e: Exception) {
+                // Already unregistered
+            }
+            receiverRegistered = false
+        }
         scope.cancel()
     }
 }

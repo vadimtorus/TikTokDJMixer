@@ -1,10 +1,8 @@
 package com.tiktokdj.mixer.streaming
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import com.tiktokdj.mixer.model.StreamConfig
-import com.tiktokdj.mixer.model.StreamMethod
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,9 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import java.net.URLEncoder
 
 class TikTokLiveStreamer(private val context: Context) {
 
@@ -23,7 +19,6 @@ class TikTokLiveStreamer(private val context: Context) {
         private const val TIKTOK_AUTH_URL = "https://open.tiktokapis.com/v2/oauth/token/"
         private const val TIKTOK_LIVE_INIT_URL = "https://open.tiktokapis.com/v2/live/init/"
         private const val TIKTOK_LIVE_FINISH_URL = "https://open.tiktokapis.com/v2/live/finish/"
-        private const val TIKTOK_LIVE_PUSH_URL = "https://open.tiktokapis.com/v2/live/push/"
     }
 
     private val _streamState = MutableStateFlow<StreamState>(StreamState.Idle)
@@ -33,7 +28,6 @@ class TikTokLiveStreamer(private val context: Context) {
     private var streamKey: String = ""
     private var accessToken: String = ""
     private var roomId: String = ""
-    private var scopeKey: String = ""
 
     private var streamingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -51,7 +45,10 @@ class TikTokLiveStreamer(private val context: Context) {
         return try {
             _streamState.value = StreamState.Initializing
 
-            val params = "client_key=$clientKey&client_secret=$clientSecret&grant_type=client_credentials"
+            val encodedKey = URLEncoder.encode(clientKey, "UTF-8")
+            val encodedSecret = URLEncoder.encode(clientSecret, "UTF-8")
+            val params = "client_key=$encodedKey&client_secret=$encodedSecret&grant_type=client_credentials"
+
             val connection = URL(TIKTOK_AUTH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -72,7 +69,7 @@ class TikTokLiveStreamer(private val context: Context) {
                 }
             } else {
                 val error = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
-                _streamState.value = StreamState.Error("Auth failed: ${connection.responseCode} - $error")
+                _streamState.value = StreamState.Error("Auth failed: ${connection.responseCode}")
                 false
             }
         } catch (e: Exception) {
@@ -90,10 +87,16 @@ class TikTokLiveStreamer(private val context: Context) {
         return try {
             _streamState.value = StreamState.Initializing
 
-            val params = buildString {
-                append("title=$title")
-                append("&quality=$quality")
-                if (region.isNotEmpty()) append("&region=$region")
+            val encodedTitle = URLEncoder.encode(title, "UTF-8")
+            val encodedQuality = URLEncoder.encode(quality, "UTF-8")
+
+            val body = buildString {
+                append("{\"title\":\"$encodedTitle\",\"quality\":\"$encodedQuality\"")
+                if (region.isNotEmpty()) {
+                    val encodedRegion = URLEncoder.encode(region, "UTF-8")
+                    append(",\"region\":\"$encodedRegion\"")
+                }
+                append("}")
             }
 
             val connection = URL(TIKTOK_LIVE_INIT_URL).openConnection() as HttpURLConnection
@@ -102,7 +105,6 @@ class TikTokLiveStreamer(private val context: Context) {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
-            val body = """{"title":"$title","quality":"$quality"}"""
             OutputStreamWriter(connection.outputStream).use { it.write(body) }
 
             if (connection.responseCode == 200) {
@@ -132,6 +134,7 @@ class TikTokLiveStreamer(private val context: Context) {
     }
 
     suspend fun pushStreamData(audioData: ByteArray): Boolean {
+        if (_streamState.value !is StreamState.Streaming) return false
         return try {
             val url = URL("$TIKTOK_LIVE_PUSH_URL?room_id=$roomId")
             val connection = url.openConnection() as HttpURLConnection
@@ -163,13 +166,13 @@ class TikTokLiveStreamer(private val context: Context) {
         streamingJob = null
 
         return try {
+            val body = """{"room_id":"$roomId"}"""
             val connection = URL(TIKTOK_LIVE_FINISH_URL).openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
-            val body = """{"room_id":"$roomId"}"""
             OutputStreamWriter(connection.outputStream).use { it.write(body) }
 
             _streamState.value = StreamState.Finished
@@ -182,11 +185,10 @@ class TikTokLiveStreamer(private val context: Context) {
         }
     }
 
-    fun getStreamUrl(): String = "$streamServerUrl/$streamKey"
-
     fun isStreaming(): Boolean = _streamState.value is StreamState.Streaming
 
     fun cleanup() {
+        streamingJob?.cancel()
         scope.cancel()
     }
 

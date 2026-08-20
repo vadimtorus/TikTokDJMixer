@@ -1,8 +1,6 @@
 package com.tiktokdj.mixer.streaming
 
-import android.content.Context
 import android.util.Log
-import com.tiktokdj.mixer.model.StreamConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,13 +11,13 @@ import java.net.Socket
 import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.random.Random
 
-class RTMPStreamer(private val context: Context) {
+class RTMPStreamer {
 
     companion object {
         private const val TAG = "RTMPStreamer"
         private const val RTMP_PORT = 1935
-        private const val CHUNK_SIZE = 4096
     }
 
     private val _streamState = MutableStateFlow<RTMPState>(RTMPState.Idle)
@@ -30,9 +28,8 @@ class RTMPStreamer(private val context: Context) {
     private var inputStream: DataInputStream? = null
     private var streamingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
     private var transactionId = 0
-    private var streamStartTime = 0L
+    private var rtmpUrl: String = ""
 
     sealed class RTMPState {
         data object Idle : RTMPState()
@@ -43,14 +40,15 @@ class RTMPStreamer(private val context: Context) {
         data object Disconnected : RTMPState()
     }
 
-    suspend fun connect(rtmpUrl: String): Boolean {
+    suspend fun connect(url: String): Boolean {
         return try {
             _streamState.value = RTMPState.Connecting
+            rtmpUrl = url
 
-            val url = URL(rtmpUrl)
-            val host = url.host
-            val port = if (url.port > 0) url.port else RTMP_PORT
-            val path = url.path
+            val parsedUrl = URL(url)
+            val host = parsedUrl.host
+            val port = if (parsedUrl.port > 0) parsedUrl.port else RTMP_PORT
+            val path = parsedUrl.path
 
             socket = Socket()
             socket!!.tcpNoDelay = true
@@ -60,64 +58,53 @@ class RTMPStreamer(private val context: Context) {
             outputStream = DataOutputStream(BufferedOutputStream(socket!!.getOutputStream()))
             inputStream = DataInputStream(BufferedInputStream(socket!!.getInputStream()))
 
-            performHandshake(path)
+            performHandshake()
+            sendConnect(path, host, port)
+
             _streamState.value = RTMPState.Connected
             Log.d(TAG, "Connected to RTMP: $host:$port$path")
             true
         } catch (e: Exception) {
             Log.e(TAG, "RTMP connection error", e)
             _streamState.value = RTMPState.Error("Connection failed: ${e.message}")
+            disconnect()
             false
         }
     }
 
-    private suspend fun performHandshake(path: String) {
+    private suspend fun performHandshake() {
         val dos = outputStream ?: return
+        val dis = inputStream ?: return
 
-        // C0 + C1
-        val c0c1 = ByteArray(1536 + 1)
-        c0c1[0] = 0x03 // RTMP version
+        val c0c1 = ByteArray(1537)
+        c0c1[0] = 0x03
         val timestamp = (System.currentTimeMillis() / 1000).toInt()
         c0c1[1] = ((timestamp shr 24) and 0xFF).toByte()
         c0c1[2] = ((timestamp shr 16) and 0xFF).toByte()
         c0c1[3] = ((timestamp shr 8) and 0xFF).toByte()
         c0c1[4] = (timestamp and 0xFF).toByte()
-
-        // Zero
-        for (i in 8..1536) c0c1[i] = 0
+        for (i in 8 until c0c1.size) {
+            c0c1[i] = Random.nextInt(1, 255).toByte()
+        }
 
         withContext(Dispatchers.IO) {
             dos.write(c0c1)
             dos.flush()
         }
 
-        // S0 + S1
-        val dis = inputStream ?: return
         val s0s1 = ByteArray(1537)
-        withContext(Dispatchers.IO) {
-            dis.readFully(s0s1)
-        }
+        withContext(Dispatchers.IO) { dis.readFully(s0s1) }
 
-        // C2
-        val c2 = s0s1.copyOfRange(1, 1537)
         withContext(Dispatchers.IO) {
-            dos.write(c2)
+            dos.write(s0s1, 1, 1536)
             dos.flush()
         }
 
-        // Read S2
         val s2 = ByteArray(1536)
-        withContext(Dispatchers.IO) {
-            dis.readFully(s2)
-        }
-
-        // Send connect
-        sendConnect(path)
+        withContext(Dispatchers.IO) { dis.readFully(s2) }
     }
 
-    private suspend fun sendConnect(path: String) {
-        val dos = outputStream ?: return
-
+    private suspend fun sendConnect(path: String, host: String, port: Int) {
         transactionId++
         val amf = buildAMF0 {
             writeString("connect")
@@ -126,16 +113,14 @@ class RTMPStreamer(private val context: Context) {
             writeProperty("app", path.trimStart('/'))
             writeProperty("type", "nonprivate")
             writeProperty("flashVer", "FMLE/3.0")
-            writeProperty("tcUrl", "rtmp://${outputStream.toString()}")
+            writeProperty("tcUrl", "rtmp://$host:$port$path")
             writeObjectEnd()
         }
-
         sendChunk(3, 0x14, 0, amf)
     }
 
     fun startStreaming(): Boolean {
         if (_streamState.value !is RTMPState.Connected) return false
-
         streamingJob = scope.launch {
             _streamState.value = RTMPState.Streaming()
             Log.d(TAG, "RTMP streaming started")
@@ -145,61 +130,53 @@ class RTMPStreamer(private val context: Context) {
 
     fun sendAudioData(data: ByteArray, timestamp: Int = 0) {
         if (_streamState.value !is RTMPState.Streaming) return
-
         scope.launch {
             try {
-                val flvHeader = buildFLVAudioTag(data)
-                sendChunk(4, 0x08, timestamp, flvHeader)
+                val flvTag = buildFLVAudioTag(data)
+                sendChunk(4, 0x08, timestamp, flvTag)
             } catch (e: Exception) {
                 Log.e(TAG, "Send audio error", e)
             }
         }
     }
 
-    fun sendVideoData(data: ByteArray, timestamp: Int = 0) {
-        if (_streamState.value !is RTMPState.Streaming) return
-
-        scope.launch {
-            try {
-                sendChunk(6, 0x09, timestamp, data)
-            } catch (e: Exception) {
-                Log.e(TAG, "Send video error", e)
-            }
-        }
+    private fun buildFLVAudioTag(pcmData: ByteArray): ByteArray {
+        val buffer = ByteBuffer.allocate(2 + pcmData.size).order(ByteOrder.BIG_ENDIAN)
+        buffer.put(0xAF.toByte())
+        buffer.put(0x01.toByte())
+        buffer.put(pcmData)
+        return buffer.array()
     }
 
     private fun sendChunk(chunkStreamId: Int, typeId: Int, timestamp: Int, data: ByteArray) {
         val dos = outputStream ?: return
 
-        val header = ByteBuffer.allocate(12)
-            .order(ByteOrder.BIG_ENDIAN)
-            .put((0x00 or (chunkStreamId and 0x3F)).toByte())
-            .putInt(timestamp.coerceAtMost(0xFFFFFF))
-            .putInt(data.size)
-            .put(typeId.toByte())
-            .putInt(0)
-            .array()
+        val fmt = 0
+        val csid = chunkStreamId and 0x3F
+        val firstByte = (fmt shl 6) or csid
+        val tsField = timestamp.coerceAtMost(0xFFFFFF)
+
+        val header = ByteBuffer.allocate(11).order(ByteOrder.BIG_ENDIAN)
+        header.put(firstByte.toByte())
+        header.put(((tsField shr 16) and 0xFF).toByte())
+        header.put(((tsField shr 8) and 0xFF).toByte())
+        header.put((tsField and 0xFF).toByte())
+        header.put(((data.size shr 16) and 0xFF).toByte())
+        header.put(((data.size shr 8) and 0xFF).toByte())
+        header.put((data.size and 0xFF).toByte())
+        header.put(typeId.toByte())
+        header.putInt(0)
 
         synchronized(dos) {
-            dos.write(header)
+            dos.write(header.array())
             dos.write(data)
             dos.flush()
         }
     }
 
-    private fun buildFLVAudioTag(pcmData: ByteArray): ByteArray {
-        val buffer = ByteBuffer.allocate(pcmData.size + 2)
-            .order(ByteOrder.BIG_ENDIAN)
-        buffer.put(0xAF.toByte()) // AAC, 44kHz, 16bit, stereo
-        buffer.put(0x01.toByte()) // AAC raw
-        buffer.put(pcmData)
-        return buffer.array()
-    }
-
     suspend fun disconnect() {
         streamingJob?.cancel()
         streamingJob = null
-
         try {
             outputStream?.close()
             inputStream?.close()
@@ -207,7 +184,9 @@ class RTMPStreamer(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Disconnect error", e)
         }
-
+        outputStream = null
+        inputStream = null
+        socket = null
         _streamState.value = RTMPState.Disconnected
     }
 
@@ -223,21 +202,21 @@ class RTMPStreamer(private val context: Context) {
 
         fun writeString(value: String) {
             val bytes = value.toByteArray(Charsets.UTF_8)
-            buffer.write(0x02) // AMF0 string
+            buffer.write(0x02)
             buffer.write(bytes.size shr 8)
             buffer.write(bytes.size and 0xFF)
             buffer.write(bytes)
         }
 
         fun writeNumber(value: Double) {
-            buffer.write(0x00) // AMF0 number
+            buffer.write(0x00)
             val bb = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
             bb.putDouble(value)
             buffer.write(bb.array())
         }
 
         fun writeObjectStart() {
-            buffer.write(0x03) // AMF0 object
+            buffer.write(0x03)
         }
 
         fun writeProperty(key: String, value: String) {
@@ -259,7 +238,7 @@ class RTMPStreamer(private val context: Context) {
         fun writeObjectEnd() {
             buffer.write(0x00)
             buffer.write(0x00)
-            buffer.write(0x09) // Object end marker
+            buffer.write(0x09)
         }
 
         fun toByteArray(): ByteArray = buffer.toByteArray()

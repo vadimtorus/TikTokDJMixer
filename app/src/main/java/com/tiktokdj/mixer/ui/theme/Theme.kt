@@ -16,8 +16,8 @@ private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFFBB86FC),
     secondary = Color(0xFF03DAC6),
     tertiary = Color(0xFF03DAC6),
-    background = DarkBackground,
-    surface = DarkSurface,
+    background = Color(0xFF1A1A2E),
+    surface = Color(0xFF16213E),
     onPrimary = Color.White,
     onSecondary = Color.Black,
     onBackground = Color.White,
@@ -27,9 +27,9 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = Color(0xFF6650a4),
+    secondary = Color(0xFF625b71),
+    tertiary = Color(0xFF7D5260)
 )
 
 @Composable
@@ -51,7 +51,6 @@ fun TikTokDJTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

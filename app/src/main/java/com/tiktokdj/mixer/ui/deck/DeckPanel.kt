@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tiktokdj.mixer.model.DeckState
-import com.tiktokdj.mixer.model.EQState
 import com.tiktokdj.mixer.utils.AudioUtils
 
 @Composable
@@ -52,7 +51,6 @@ fun DeckPanel(
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Deck header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -74,7 +72,6 @@ fun DeckPanel(
                 }
             }
 
-            // Track info
             state.track?.let { track ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -97,7 +94,6 @@ fun DeckPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Waveform display
             WaveformDisplay(
                 isPlaying = state.isPlaying,
                 deckColor = deckColor,
@@ -106,15 +102,13 @@ fun DeckPanel(
                     .height(40.dp)
             )
 
-            // Position display
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = AudioUtils.formatDuration(state.positionMs),
-                    fontSize = 10.sp,
-                    fontFamily = MaterialTheme.typography.bodySmall.fontFamily
+                    fontSize = 10.sp
                 )
                 state.track?.let {
                     Text(
@@ -124,7 +118,6 @@ fun DeckPanel(
                 }
             }
 
-            // Progress bar
             LinearProgressIndicator(
                 progress = {
                     val duration = state.track?.durationMs ?: 1L
@@ -139,18 +132,13 @@ fun DeckPanel(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Transport controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onCue) {
-                    Icon(
-                        Icons.Default.Cue,
-                        "Cue",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Icon(Icons.Default.Cue, "Cue", tint = MaterialTheme.colorScheme.primary)
                 }
 
                 IconButton(
@@ -167,33 +155,11 @@ fun DeckPanel(
                     )
                 }
 
-                IconButton(onClick = { onHotCue(1) }) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color.Red)
-                    )
-                }
-                IconButton(onClick = { onHotCue(2) }) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color.Green)
-                    )
-                }
-                IconButton(onClick = { onHotCue(3) }) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color.Blue)
-                    )
-                }
+                HotCueButton(number = 1, color = Color.Red, onClick = { onHotCue(1) })
+                HotCueButton(number = 2, color = Color.Green, onClick = { onHotCue(2) })
+                HotCueButton(number = 3, color = Color.Blue, onClick = { onHotCue(3) })
             }
 
-            // Volume slider
             Text("Volume", fontSize = 10.sp)
             Slider(
                 value = state.volume,
@@ -205,7 +171,6 @@ fun DeckPanel(
                 )
             )
 
-            // Pitch slider
             Text("Pitch", fontSize = 10.sp)
             Slider(
                 value = state.pitch,
@@ -216,6 +181,26 @@ fun DeckPanel(
                     thumbColor = deckColor,
                     activeTrackColor = deckColor
                 )
+            )
+        }
+    }
+}
+
+@Composable
+fun HotCueButton(number: Int, color: Color, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(color),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$number",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
         }
     }
@@ -238,8 +223,12 @@ fun WaveformDisplay(
         label = "waveformProgress"
     )
 
+    val cachedWaveform = remember {
+        List(50) { (Math.random() * 0.4 + 0.1).toFloat() }
+    }
+
     Canvas(modifier = modifier.background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(4.dp))) {
-        val barCount = 50
+        val barCount = cachedWaveform.size
         val barWidth = size.width / barCount
         val centerY = size.height / 2
 
@@ -249,7 +238,7 @@ fun WaveformDisplay(
                 val amplitude = (Math.sin(phase * Math.PI * 4).toFloat() + 1f) / 2f
                 amplitude * size.height * 0.8f
             } else {
-                (Math.random() * size.height * 0.3f + size.height * 0.1f).toFloat()
+                cachedWaveform[i] * size.height * 0.3f + size.height * 0.1f
             }
 
             drawLine(
@@ -261,7 +250,6 @@ fun WaveformDisplay(
             )
         }
 
-        // Playhead
         if (isPlaying) {
             drawLine(
                 color = Color.White,

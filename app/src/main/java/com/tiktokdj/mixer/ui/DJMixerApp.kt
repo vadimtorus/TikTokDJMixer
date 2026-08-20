@@ -8,14 +8,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tiktokdj.mixer.engine.MixerEngine
+import com.tiktokdj.mixer.model.EffectType
 import com.tiktokdj.mixer.streaming.StreamManager
-import com.tiktokdj.mixer.updater.AppUpdater
 import com.tiktokdj.mixer.ui.deck.DeckPanel
+import com.tiktokdj.mixer.ui.effects.EffectsPanel
 import com.tiktokdj.mixer.ui.mixer.CrossfaderBar
 import com.tiktokdj.mixer.ui.mixer.EQPanel
 import com.tiktokdj.mixer.ui.mixer.SpectrumAnalyzer
 import com.tiktokdj.mixer.ui.stream.StreamPanel
-import com.tiktokdj.mixer.ui.effects.EffectsPanel
+import com.tiktokdj.mixer.updater.AppUpdater
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +27,8 @@ fun DJMixerApp(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Mixer", "Effects", "Stream", "Library")
+
+    val mixerState by mixerEngine.mixerState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -68,7 +71,7 @@ fun DJMixerApp(
                 .padding(8.dp)
         ) {
             when (selectedTab) {
-                0 -> MixerScreen(mixerEngine)
+                0 -> MixerScreen(mixerEngine, mixerState)
                 1 -> EffectsScreen(mixerEngine)
                 2 -> StreamScreen(streamManager)
                 3 -> LibraryScreen(mixerEngine)
@@ -78,8 +81,13 @@ fun DJMixerApp(
 }
 
 @Composable
-fun MixerScreen(mixerEngine: MixerEngine) {
-    val mixerState by mixerEngine.mixerState.collectAsState()
+fun MixerScreen(mixerEngine: MixerEngine, mixerState: com.tiktokdj.mixer.model.MixerState) {
+    LaunchedEffect(Unit) {
+        while (true) {
+            mixerEngine.updateMixerState()
+            kotlinx.coroutines.delay(100)
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -95,7 +103,7 @@ fun MixerScreen(mixerEngine: MixerEngine) {
                 deckId = "A",
                 state = mixerState.deckA,
                 modifier = Modifier.weight(1f),
-                onPlayPause = { mixerEngine.startDeckA() },
+                onPlayPause = { mixerEngine.togglePlayPauseDeckA() },
                 onSeek = { mixerEngine.deckA.seekTo(it) },
                 onVolumeChange = { mixerEngine.deckA.setVolume(it) },
                 onPitchChange = { mixerEngine.deckA.setPitch(it) },
@@ -107,7 +115,7 @@ fun MixerScreen(mixerEngine: MixerEngine) {
                 deckId = "B",
                 state = mixerState.deckB,
                 modifier = Modifier.weight(1f),
-                onPlayPause = { mixerEngine.startDeckB() },
+                onPlayPause = { mixerEngine.togglePlayPauseDeckB() },
                 onSeek = { mixerEngine.deckB.seekTo(it) },
                 onVolumeChange = { mixerEngine.deckB.setVolume(it) },
                 onPitchChange = { mixerEngine.deckB.setPitch(it) },
@@ -117,6 +125,7 @@ fun MixerScreen(mixerEngine: MixerEngine) {
         }
 
         SpectrumAnalyzer(
+            getSpectrumData = { mixerEngine.getSpectralData() },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(80.dp)
@@ -151,22 +160,48 @@ fun StreamScreen(streamManager: StreamManager) {
 @Composable
 fun LibraryScreen(mixerEngine: MixerEngine) {
     var searchQuery by remember { mutableStateOf("") }
+    var tracks by remember { mutableStateOf(emptyList<com.tiktokdj.mixer.model.Track>()) }
+    var isLoading by remember { mutableStateOf(false) }
+    val trackLoader = remember { com.tiktokdj.mixer.audio.TrackLoader(
+        androidx.compose.ui.platform.LocalContext.current.applicationContext
+    ) }
 
-    Column {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         OutlinedTextField(
             value = searchQuery,
-            onValueChange = { searchQuery = it },
+            onValueChange = {
+                searchQuery = it
+                isLoading = true
+                tracks = trackLoader.searchTracks(it)
+                isLoading = false
+            },
             label = { Text("Search tracks...") },
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Default.Search, "Search") }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        if (isLoading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
 
-        Text(
-            text = "Load tracks from device storage",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(16.dp)
-        )
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(tracks) { track ->
+                ListItem(
+                    headlineContent = { Text(track.title) },
+                    supportingContent = { Text(track.artist) },
+                    trailingContent = { Text(track.durationFormatted) },
+                    leadingContent = {
+                        Icon(Icons.Default.MusicNote, "Track")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }

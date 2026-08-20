@@ -1,30 +1,10 @@
 package com.tiktokdj.mixer.utils
 
 import android.content.Context
-import android.media.audiofx.AudioEffect
-import android.os.Build
-import android.view.View
-import android.widget.SeekBar
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.*
 
 object AudioUtils {
-
-    fun getValidSessionId(context: Context): Int {
-        return try {
-            val audioSessionId = 0
-            AudioEffect.queryEffects()?.let {
-                if (it.isNotEmpty()) audioSessionId else -1
-            } ?: -1
-        } catch (e: Exception) {
-            -1
-        }
-    }
 
     fun formatDuration(durationMs: Long): String {
         val totalSeconds = durationMs / 1000
@@ -48,30 +28,13 @@ object AudioUtils {
 }
 
 object ColorUtils {
-    private val deckColors = mapOf(
-        "A" to "#FF6B6B",
-        "B" to "#4ECDC4",
-        "master" to "#FFE66D",
-        "cue1" to "#FF0000",
-        "cue2" to "#00FF00",
-        "cue3" to "#0000FF",
-        "cue4" to "#FFFF00",
-        "cue5" to "#FF00FF",
-        "cue6" to "#00FFFF"
-    )
-
     fun getDeckColor(deckId: String): String {
-        return deckColors[deckId] ?: "#FFFFFF"
-    }
-}
-
-object StringUtils {
-    fun truncate(text: String, maxLength: Int): String {
-        return if (text.length > maxLength) text.take(maxLength - 1) + "..." else text
-    }
-
-    fun generateId(): String {
-        return UUID.randomUUID().toString().take(8)
+        return when (deckId) {
+            "A" -> "#FF6B6B"
+            "B" -> "#4ECDC4"
+            "master" -> "#FFE66D"
+            else -> "#FFFFFF"
+        }
     }
 }
 

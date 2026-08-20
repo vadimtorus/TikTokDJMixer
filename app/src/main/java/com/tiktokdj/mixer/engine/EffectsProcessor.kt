@@ -2,11 +2,12 @@ package com.tiktokdj.mixer.engine
 
 import com.tiktokdj.mixer.model.Effect
 import com.tiktokdj.mixer.model.EffectType
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.*
 
 class EffectsProcessor {
 
-    private val activeEffects = mutableMapOf<EffectType, Effect>()
+    private val activeEffects = ConcurrentHashMap<EffectType, Effect>()
     private val delayBuffer = FloatArray(48000)
     private var delayWritePos = 0
     private val delayMaxSamples = 48000
@@ -16,12 +17,12 @@ class EffectsProcessor {
     private var flangerPhase = 0f
 
     fun process(input: FloatArray, sampleRate: Int): FloatArray {
-        var output = input.copyOf()
+        if (activeEffects.isEmpty()) return input
 
+        var output = input.copyOf()
         for ((type, effect) in activeEffects) {
             output = applyEffect(output, type, effect.intensity, sampleRate)
         }
-
         return output
     }
 
@@ -41,9 +42,16 @@ class EffectsProcessor {
 
     fun clearEffects() {
         activeEffects.clear()
+        delayWritePos = 0
+        delayBuffer.fill(0f)
+        flangerPos = 0
+        flangerPhase = 0f
+        flangerBuffer.fill(0f)
     }
 
     fun getActiveEffects(): List<Effect> = activeEffects.values.toList()
+
+    fun isEffectActive(type: EffectType): Boolean = activeEffects.containsKey(type)
 
     private fun applyEffect(
         input: FloatArray,
@@ -93,7 +101,7 @@ class EffectsProcessor {
                     sample += input[idx] * gains[j] * intensity
                 }
             }
-            output[i] = sample
+            output[i] = sample.coerceIn(-1f, 1f)
         }
 
         return output
@@ -177,7 +185,7 @@ class EffectsProcessor {
         val gain = 1f + intensity * 10f
         return FloatArray(input.size) { i ->
             val amplified = input[i] * gain
-            (2f / PI.toFloat()) * atan(amplified * intensity)
+            ((2f / PI.toFloat()) * atan(amplified * intensity)).coerceIn(-1f, 1f)
         }
     }
 
@@ -201,7 +209,7 @@ class EffectsProcessor {
             val delayed = delayBuffer[readPos]
             delayBuffer[delayWritePos] = input[i] + delayed * feedback
             delayWritePos = (delayWritePos + 1) % delayMaxSamples
-            output[i] = input[i] + delayed * intensity * 0.5f
+            output[i] = (input[i] + delayed * intensity * 0.5f).coerceIn(-1f, 1f)
         }
 
         return output

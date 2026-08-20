@@ -5,8 +5,6 @@ import com.tiktokdj.mixer.model.MixerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlin.math.abs
-import kotlin.math.sqrt
 
 class MixerEngine(context: Context) {
 
@@ -17,7 +15,7 @@ class MixerEngine(context: Context) {
     val mixerState: StateFlow<MixerState> = _mixerState.asStateFlow()
 
     private val bpmDetector = BPMDetector()
-    private val effectsProcessor = EffectsProcessor()
+    val effectsProcessor = EffectsProcessor()
     private val spectralAnalyzer = SpectralAnalyzer()
 
     fun initialize() {
@@ -35,6 +33,7 @@ class MixerEngine(context: Context) {
         _mixerState.value = _mixerState.value.copy(
             masterVolume = volume.coerceIn(0f, 1f)
         )
+        updateDeckVolumes()
     }
 
     fun toggleSync() {
@@ -70,23 +69,13 @@ class MixerEngine(context: Context) {
         )
     }
 
-    fun startDeckA() {
-        deckA.play()
+    fun togglePlayPauseDeckA() {
+        deckA.togglePlayPause()
         _mixerState.value = _mixerState.value.copy(deckA = deckA.state.value)
     }
 
-    fun stopDeckA() {
-        deckA.pause()
-        _mixerState.value = _mixerState.value.copy(deckA = deckA.state.value)
-    }
-
-    fun startDeckB() {
-        deckB.play()
-        _mixerState.value = _mixerState.value.copy(deckB = deckB.state.value)
-    }
-
-    fun stopDeckB() {
-        deckB.pause()
+    fun togglePlayPauseDeckB() {
+        deckB.togglePlayPause()
         _mixerState.value = _mixerState.value.copy(deckB = deckB.state.value)
     }
 
@@ -94,31 +83,42 @@ class MixerEngine(context: Context) {
         val stateA = deckA.state.value
         val stateB = deckB.state.value
 
-        if (stateA.isPlaying && !stateB.isPlaying) {
-            val remainingA = (deckA.getDurationMs() - stateA.positionMs)
+        if (stateA.isPlaying && !stateB.isPlaying && deckB.hasTrack()) {
+            val remainingA = deckA.getDurationMs() - stateA.positionMs
             if (remainingA < 15000) {
                 deckB.play()
-                deckB.setVolume(_mixerState.value.masterVolume)
-                crossfadeToB()
+                gradualCrossfade(1f, 5000)
             }
-        } else if (!stateA.isPlaying && stateB.isPlaying) {
-            val remainingB = (deckB.getDurationMs() - stateB.positionMs)
+        } else if (!stateA.isPlaying && stateB.isPlaying && deckA.hasTrack()) {
+            val remainingB = deckB.getDurationMs() - stateB.positionMs
             if (remainingB < 15000) {
                 deckA.play()
-                deckA.setVolume(_mixerState.value.masterVolume)
-                crossfadeToA()
+                gradualCrossfade(0f, 5000)
             }
         }
     }
 
-    private fun crossfadeToA() {
-        _mixerState.value = _mixerState.value.copy(crossfader = 0f)
-        updateDeckVolumes()
+    private fun gradualCrossfade(target: Float, durationMs: Long) {
+        val start = _mixerState.value.crossfader
+        val steps = 50
+        val stepDelay = durationMs / steps
+
+        for (i in 1..steps) {
+            val progress = i.toFloat() / steps
+            val position = start + (target - start) * progress
+
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                _mixerState.value = _mixerState.value.copy(crossfader = position)
+                updateDeckVolumes()
+            }, i * stepDelay)
+        }
     }
 
-    private fun crossfadeToB() {
-        _mixerState.value = _mixerState.value.copy(crossfader = 1f)
-        updateDeckVolumes()
+    fun updateMixerState() {
+        _mixerState.value = _mixerState.value.copy(
+            deckA = deckA.state.value,
+            deckB = deckB.state.value
+        )
     }
 
     fun analyzeBPM(audioData: FloatArray, sampleRate: Int): Float {
@@ -127,6 +127,10 @@ class MixerEngine(context: Context) {
 
     fun getSpectralData(): FloatArray {
         return spectralAnalyzer.getSpectrum()
+    }
+
+    fun analyzeSpectrum(frame: FloatArray): FloatArray {
+        return spectralAnalyzer.analyze(frame)
     }
 
     fun getLeftChannelLevel(): Float {

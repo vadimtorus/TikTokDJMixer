@@ -14,7 +14,7 @@ import com.tiktokdj.mixer.model.Track
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlin.math.abs
+import java.util.concurrent.CopyOnWriteArrayList
 
 class DeckPlayer(
     private val context: Context,
@@ -32,19 +32,22 @@ class DeckPlayer(
     private val _waveform = MutableStateFlow<List<Float>>(emptyList())
     val waveform: StateFlow<List<Float>> = _waveform.asStateFlow()
 
-    private val hotCues = mutableListOf<HotCue>()
+    private val hotCues = CopyOnWriteArrayList<HotCue>()
     private var currentTrack: Track? = null
 
     private val positionUpdater = object : Runnable {
         override fun run() {
             exoPlayer?.let { player ->
-                _position.value = player.currentPosition
+                val pos = player.currentPosition
+                _position.value = pos
                 _state.value = _state.value.copy(
-                    positionMs = player.currentPosition,
+                    positionMs = pos,
                     isPlaying = player.isPlaying
                 )
             }
-            handler.postDelayed(this, 50)
+            if (exoPlayer != null) {
+                handler.postDelayed(this, 50)
+            }
         }
     }
 
@@ -52,7 +55,6 @@ class DeckPlayer(
         exoPlayer = ExoPlayer.Builder(context)
             .setHandleAudioBecomingNoisy(true)
             .build()
-        handler.post(positionUpdater)
     }
 
     fun loadTrack(track: Track) {
@@ -67,11 +69,17 @@ class DeckPlayer(
             positionMs = 0,
             isPlaying = false
         )
+        handler.removeCallbacks(positionUpdater)
+        handler.post(positionUpdater)
     }
 
     fun play() {
+        if (_state.value.track == null) return
         exoPlayer?.play()
         _state.value = _state.value.copy(isPlaying = true)
+        if (!handler.hasCallbacks(positionUpdater)) {
+            handler.post(positionUpdater)
+        }
     }
 
     fun pause() {
@@ -101,12 +109,15 @@ class DeckPlayer(
     }
 
     fun setEQ(low: Float, mid: Float, high: Float) {
+        val clampedLow = low.coerceIn(0f, 1f)
+        val clampedMid = mid.coerceIn(0f, 1f)
+        val clampedHigh = high.coerceIn(0f, 1f)
+
+        val volumeScale = (clampedLow + clampedMid + clampedHigh) / 3f
+        exoPlayer?.volume = _state.value.volume * volumeScale
+
         _state.value = _state.value.copy(
-            eq = EQState(
-                low = low.coerceIn(0f, 1f),
-                mid = mid.coerceIn(0f, 1f),
-                high = high.coerceIn(0f, 1f)
-            )
+            eq = EQState(low = clampedLow, mid = clampedMid, high = clampedHigh)
         )
     }
 
@@ -125,7 +136,7 @@ class DeckPlayer(
     }
 
     fun addHotCue(id: Int, color: String, label: String = "") {
-        hotCues.removeIf { it.id == id }
+        hotCues.removeAll { it.id == id }
         hotCues.add(HotCue(id, _position.value, color, label))
     }
 
@@ -142,6 +153,8 @@ class DeckPlayer(
     fun getDurationMs(): Long = exoPlayer?.duration ?: 0L
 
     fun isPlaying(): Boolean = _state.value.isPlaying
+
+    fun hasTrack(): Boolean = _state.value.track != null
 
     fun release() {
         handler.removeCallbacks(positionUpdater)

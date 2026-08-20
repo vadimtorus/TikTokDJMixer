@@ -3,14 +3,11 @@ package com.tiktokdj.mixer.service
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.tiktokdj.mixer.TikTokDJApp
-import com.tiktokdj.mixer.engine.MixerEngine
 import com.tiktokdj.mixer.streaming.StreamManager
 import com.tiktokdj.mixer.ui.MainActivity
 
@@ -19,28 +16,33 @@ class StreamingService : Service() {
     companion object {
         private const val TAG = "StreamingService"
         private const val NOTIFICATION_ID = 1001
-        const val ACTION_START = "com.tiktokdj.mixer.START_STREAM"
+        const val ACTION_START_RTMP = "com.tiktokdj.mixer.START_RTMP"
+        const val ACTION_START_TIKTOK = "com.tiktokdj.mixer.START_TIKTOK"
         const val ACTION_STOP = "com.tiktokdj.mixer.STOP_STREAM"
         const val EXTRA_RTMP_URL = "rtmp_url"
         const val EXTRA_TITLE = "title"
+        const val EXTRA_CLIENT_KEY = "client_key"
+        const val EXTRA_CLIENT_SECRET = "client_secret"
     }
 
     private var streamManager: StreamManager? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        Log.d(TAG, "StreamingService created")
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> {
+            ACTION_START_RTMP -> {
                 val rtmpUrl = intent.getStringExtra(EXTRA_RTMP_URL) ?: ""
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: "DJ Mix Live"
                 startForeground(NOTIFICATION_ID, createNotification(title))
-                startStreaming(rtmpUrl, title)
+                startRtmpStream(rtmpUrl)
+            }
+            ACTION_START_TIKTOK -> {
+                val clientKey = intent.getStringExtra(EXTRA_CLIENT_KEY) ?: ""
+                val clientSecret = intent.getStringExtra(EXTRA_CLIENT_SECRET) ?: ""
+                val title = intent.getStringExtra(EXTRA_TITLE) ?: "DJ Mix Live"
+                startForeground(NOTIFICATION_ID, createNotification(title))
+                startTikTokStream(clientKey, clientSecret, title)
             }
             ACTION_STOP -> {
                 stopStreaming()
@@ -51,14 +53,38 @@ class StreamingService : Service() {
         return START_STICKY
     }
 
-    private fun startStreaming(rtmpUrl: String, title: String) {
+    private fun startRtmpStream(rtmpUrl: String) {
         streamManager = StreamManager(applicationContext)
-        // Stream will be started via the manager
+        val manager = streamManager ?: return
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val started = manager.startRTMPStream(rtmpUrl)
+            if (!started) {
+                Log.e(TAG, "Failed to start RTMP stream")
+                stopSelf()
+            }
+        }
+    }
+
+    private fun startTikTokStream(clientKey: String, clientSecret: String, title: String) {
+        streamManager = StreamManager(applicationContext)
+        val manager = streamManager ?: return
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val started = manager.startTikTokStream(clientKey, clientSecret, title)
+            if (!started) {
+                Log.e(TAG, "Failed to start TikTok stream")
+                stopSelf()
+            }
+        }
     }
 
     private fun stopStreaming() {
-        streamManager?.cleanup()
-        streamManager = null
+        val manager = streamManager ?: return
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            manager.stopStreaming()
+            streamManager = null
+        }
     }
 
     private fun createNotification(title: String): Notification {
@@ -79,13 +105,13 @@ class StreamingService : Service() {
             .setContentText(title)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_media_pause, "Остановить", stopIntent)
+            .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
             .setOngoing(true)
             .build()
     }
 
     override fun onDestroy() {
-        streamManager?.cleanup()
+        stopStreaming()
         super.onDestroy()
     }
 }

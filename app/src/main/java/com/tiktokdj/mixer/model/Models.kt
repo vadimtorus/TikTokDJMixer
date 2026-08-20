@@ -112,7 +112,7 @@ data class UpdateInfo(
     val downloadUrl: String,
     val changelog: String,
     val isRequired: Boolean = false,
-    val publishedAt: Long = System.currentTimeMillis()
+    val publishedAt: Long = 0L
 )
 
 @Serializable

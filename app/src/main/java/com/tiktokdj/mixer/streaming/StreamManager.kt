@@ -1,20 +1,16 @@
 package com.tiktokdj.mixer.streaming
 
 import android.content.Context
-import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.util.Log
-import com.tiktokdj.mixer.engine.MixerEngine
-import com.tiktokdj.mixer.model.StreamConfig
 import com.tiktokdj.mixer.model.StreamMethod
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -27,8 +23,8 @@ class StreamManager(private val context: Context) {
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     }
 
-    private val tiktokStreamer = TikTokLiveStreamer(context)
-    private val rtmpStreamer = RTMPStreamer(context)
+    private var tiktokStreamer: TikTokLiveStreamer? = null
+    private var rtmpStreamer: RTMPStreamer? = null
 
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
@@ -40,8 +36,10 @@ class StreamManager(private val context: Context) {
     private var captureJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    val tiktokState: StateFlow<TikTokLiveStreamer.StreamState> = tiktokStreamer.streamState
-    val rtmpState: StateFlow<RTMPStreamer.RTMPState> = rtmpStreamer.streamState
+    val tiktokState: StateFlow<TikTokLiveStreamer.StreamState>
+        get() = tiktokStreamer?.streamState ?: MutableStateFlow(TikTokLiveStreamer.StreamState.Idle)
+    val rtmpState: StateFlow<RTMPStreamer.RTMPState>
+        get() = rtmpStreamer?.streamState ?: MutableStateFlow(RTMPStreamer.RTMPState.Idle)
 
     suspend fun startTikTokStream(
         clientKey: String,
@@ -50,18 +48,11 @@ class StreamManager(private val context: Context) {
     ): Boolean {
         return try {
             _currentMethod.value = StreamMethod.TIKTOK_LIVE_API
+            tiktokStreamer = TikTokLiveStreamer(context)
 
-            if (!tiktokStreamer.authenticate(clientKey, clientSecret)) {
-                return false
-            }
-
-            if (!tiktokStreamer.initLiveStream(title)) {
-                return false
-            }
-
-            if (!tiktokStreamer.startStreaming()) {
-                return false
-            }
+            if (!tiktokStreamer!!.authenticate(clientKey, clientSecret)) return false
+            if (!tiktokStreamer!!.initLiveStream(title)) return false
+            if (!tiktokStreamer!!.startStreaming()) return false
 
             startAudioCapture(StreamMethod.TIKTOK_LIVE_API)
             _isStreaming.value = true
@@ -75,14 +66,10 @@ class StreamManager(private val context: Context) {
     suspend fun startRTMPStream(rtmpUrl: String): Boolean {
         return try {
             _currentMethod.value = StreamMethod.RTMP
+            rtmpStreamer = RTMPStreamer()
 
-            if (!rtmpStreamer.connect(rtmpUrl)) {
-                return false
-            }
-
-            if (!rtmpStreamer.startStreaming()) {
-                return false
-            }
+            if (!rtmpStreamer!!.connect(rtmpUrl)) return false
+            if (!rtmpStreamer!!.startStreaming()) return false
 
             startAudioCapture(StreamMethod.RTMP)
             _isStreaming.value = true
@@ -95,14 +82,30 @@ class StreamManager(private val context: Context) {
 
     private fun startAudioCapture(method: StreamMethod) {
         val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+        if (bufferSize <= 0) {
+            Log.e(TAG, "Invalid buffer size: $bufferSize")
+            return
+        }
 
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
-            CHANNEL_CONFIG,
-            AUDIO_FORMAT,
-            bufferSize * 2
-        )
+        audioRecord = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize * 2
+            )
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Microphone permission not granted", e)
+            null
+        }
+
+        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord failed to initialize")
+            audioRecord?.release()
+            audioRecord = null
+            return
+        }
 
         captureJob = scope.launch {
             val buffer = ShortArray(bufferSize / 2)
@@ -112,13 +115,12 @@ class StreamManager(private val context: Context) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                 if (read > 0) {
                     val pcmData = shortsToByteArray(buffer, read)
-
                     when (method) {
                         StreamMethod.TIKTOK_LIVE_API -> {
-                            tiktokStreamer.pushStreamData(pcmData)
+                            tiktokStreamer?.pushStreamData(pcmData)
                         }
                         StreamMethod.RTMP -> {
-                            rtmpStreamer.sendAudioData(pcmData)
+                            rtmpStreamer?.sendAudioData(pcmData)
                         }
                     }
                 }
@@ -136,49 +138,61 @@ class StreamManager(private val context: Context) {
 
     suspend fun stopStreaming() {
         _isStreaming.value = false
-        captureJob?.cancel()
+        _currentMethod.value = null
+
+        captureJob?.cancelAndJoin()
         captureJob = null
 
-        audioRecord?.stop()
+        try {
+            audioRecord?.stop()
+        } catch (e: Exception) {
+            Log.e(TAG, "AudioRecord stop error", e)
+        }
         audioRecord?.release()
         audioRecord = null
 
         when (_currentMethod.value) {
-            StreamMethod.TIKTOK_LIVE_API -> tiktokStreamer.stopStreaming()
-            StreamMethod.RTMP -> rtmpStreamer.disconnect()
+            StreamMethod.TIKTOK_LIVE_API -> tiktokStreamer?.stopStreaming()
+            StreamMethod.RTMP -> rtmpStreamer?.disconnect()
             null -> {}
         }
 
-        _currentMethod.value = null
         Log.d(TAG, "Streaming stopped")
     }
 
     fun sendMixerAudio(audioData: FloatArray) {
         if (!_isStreaming.value) return
+        val method = _currentMethod.value ?: return
 
         val pcmData = floatToShortArray(audioData)
         val byteArray = shortsToByteArray(pcmData, pcmData.size)
 
-        when (_currentMethod.value) {
+        when (method) {
             StreamMethod.TIKTOK_LIVE_API -> {
-                scope.launch { tiktokStreamer.pushStreamData(byteArray) }
+                scope.launch { tiktokStreamer?.pushStreamData(byteArray) }
             }
             StreamMethod.RTMP -> {
-                rtmpStreamer.sendAudioData(byteArray)
+                rtmpStreamer?.sendAudioData(byteArray)
             }
-            null -> {}
         }
     }
 
     private fun floatToShortArray(floats: FloatArray): ShortArray {
         return ShortArray(floats.size) { i ->
-            (floats[i] * Short.MAX_VALUE).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            (floats[i] * Short.MAX_VALUE).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                .toShort()
         }
     }
 
     fun cleanup() {
+        scope.launch {
+            if (_isStreaming.value) {
+                stopStreaming()
+            }
+        }
+        tiktokStreamer?.cleanup()
+        rtmpStreamer?.cleanup()
         scope.cancel()
-        tiktokStreamer.cleanup()
-        rtmpStreamer.cleanup()
     }
 }

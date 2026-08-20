@@ -1,6 +1,7 @@
 package com.tiktokdj.mixer.ui.effects
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,7 +22,19 @@ import com.tiktokdj.mixer.model.EffectType
 
 @Composable
 fun EffectsPanel(mixerEngine: MixerEngine) {
-    val activeEffects = remember { mutableStateListOf<Effect>() }
+    val activeEffects = remember { mutableStateListOf<EffectType>() }
+
+    fun toggleEffect(type: EffectType) {
+        if (activeEffects.contains(type)) {
+            activeEffects.remove(type)
+            mixerEngine.effectsProcessor.removeEffect(type)
+        } else {
+            activeEffects.add(type)
+            mixerEngine.effectsProcessor.addEffect(
+                Effect(type.name, type.name, type, 0.5f)
+            )
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -33,192 +47,52 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
             modifier = Modifier.padding(8.dp)
         )
 
-        // Effects grid
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Row 1: Echo, Reverb, Delay
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                EffectButton(
-                    effectType = EffectType.ECHO,
-                    label = "Echo",
-                    icon = Icons.DefaultgraphicEq,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.REVERB,
-                    label = "Reverb",
-                    icon = Icons.Default.Waves,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.DELAY,
-                    label = "Delay",
-                    icon = Icons.Default.Timer,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EffectButton(EffectType.ECHO, "Echo", Icons.DefaultgraphicEq, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.REVERB, "Reverb", Icons.Default.Waves, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.DELAY, "Delay", Icons.Default.Timer, activeEffects, ::toggleEffect, Modifier.weight(1f))
             }
 
-            // Row 2: Flanger, Phaser, Filter
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                EffectButton(
-                    effectType = EffectType.FLANGER,
-                    label = "Flanger",
-                    icon = Icons.Default.SwapVert,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.PHASER,
-                    label = "Phaser",
-                    icon = Icons.Default.RotateRight,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.FILTER_LOW_PASS,
-                    label = "LP Filter",
-                    icon = Icons.Default.FilterAlt,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EffectButton(EffectType.FLANGER, "Flanger", Icons.Default.SwapVert, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.PHASER, "Phaser", Icons.Default.RotateRight, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.FILTER_LOW_PASS, "LP Filter", Icons.Default.FilterAlt, activeEffects, ::toggleEffect, Modifier.weight(1f))
             }
 
-            // Row 3: HP Filter, Distortion, Bitcrusher
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                EffectButton(
-                    effectType = EffectType.FILTER_HIGH_PASS,
-                    label = "HP Filter",
-                    icon = Icons.Default.FilterAltOff,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.DISTORTION,
-                    label = "Distort",
-                    icon = Icons.Default.Bolt,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-
-                EffectButton(
-                    effectType = EffectType.BITCRUSHER,
-                    label = "Bitcrush",
-                    icon = Icons.Default.Memory,
-                    activeEffects = activeEffects,
-                    onToggle = { type, active, intensity ->
-                        if (active) {
-                            activeEffects.add(Effect(type.name, type.name, type, intensity))
-                        } else {
-                            activeEffects.removeAll { it.type == type }
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EffectButton(EffectType.FILTER_HIGH_PASS, "HP Filter", Icons.Default.FilterAltOff, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.DISTORTION, "Distort", Icons.Default.Bolt, activeEffects, ::toggleEffect, Modifier.weight(1f))
+                EffectButton(EffectType.BITCRUSHER, "Bitcrush", Icons.Default.Memory, activeEffects, ::toggleEffect, Modifier.weight(1f))
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // X/Y Pad for effect modulation
-        Text(
-            text = "Effect Modulation",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Text("Effect Modulation", fontSize = 14.sp, fontWeight = FontWeight.Medium)
 
         XYModPad(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(200.dp),
+            onModulationChange = { x, y ->
+                // Apply to active effects
+            }
         )
 
-        // Active effects list
         if (activeEffects.isNotEmpty()) {
-            Text(
-                text = "Active Effects",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            activeEffects.forEach { effect ->
-                EffectChip(
-                    effect = effect,
-                    onRemove = { activeEffects.remove(effect) }
+            Text("Active Effects", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            activeEffects.forEach { type ->
+                InputChip(
+                    selected = true,
+                    onClick = { toggleEffect(type) },
+                    label = { Text(type.name) },
+                    trailingIcon = {
+                        Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(16.dp))
+                    }
                 )
             }
         }
@@ -230,22 +104,14 @@ fun EffectButton(
     effectType: EffectType,
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    activeEffects: List<Effect>,
-    onToggle: (EffectType, Boolean, Float) -> Unit,
+    activeEffects: List<EffectType>,
+    onToggle: (EffectType) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isActive = activeEffects.any { it.type == effectType }
-    val intensity = activeEffects.find { it.type == effectType }?.intensity ?: 0.5f
-    var showSlider by remember { mutableStateOf(false) }
+    val isActive = activeEffects.contains(effectType)
 
     Card(
-        onClick = {
-            if (isActive) {
-                onToggle(effectType, false, 0f)
-            } else {
-                onToggle(effectType, true, intensity)
-            }
-        },
+        onClick = { onToggle(effectType) },
         modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = if (isActive)
@@ -261,38 +127,43 @@ fun EffectButton(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                icon,
-                label,
-                tint = if (isActive)
-                    MaterialTheme.colorScheme.onPrimary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                icon, label,
+                tint = if (isActive) MaterialTheme.colorScheme.onPrimary
+                       else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
                 fontSize = 11.sp,
-                color = if (isActive)
-                    MaterialTheme.colorScheme.onPrimary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (isActive) MaterialTheme.colorScheme.onPrimary
+                         else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
 @Composable
-fun XYModPad(modifier: Modifier = Modifier) {
+fun XYModPad(
+    modifier: Modifier = Modifier,
+    onModulationChange: (Float, Float) -> Unit = { _, _ -> }
+) {
     var offsetX by remember { mutableFloatStateOf(0.5f) }
     var offsetY by remember { mutableFloatStateOf(0.5f) }
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF1A1A2E)),
+            .background(Color(0xFF1A1A2E))
+            .pointerInput(Unit) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    offsetX = (change.position.x / size.width).coerceIn(0f, 1f)
+                    offsetY = (change.position.y / size.height).coerceIn(0f, 1f)
+                    onModulationChange(offsetX, offsetY)
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
-        // Grid lines
         Canvas(modifier = Modifier.fillMaxSize()) {
             for (i in 1..4) {
                 drawLine(
@@ -307,36 +178,16 @@ fun XYModPad(modifier: Modifier = Modifier) {
                 )
             }
 
-            // Crosshair
-            drawCircle(
-                color = Color.Cyan.copy(alpha = 0.8f),
-                radius = 12f,
-                center = Offset(offsetX * size.width, offsetY * size.height)
-            )
             drawCircle(
                 color = Color.Cyan.copy(alpha = 0.3f),
                 radius = 24f,
                 center = Offset(offsetX * size.width, offsetY * size.height)
             )
-        }
-    }
-}
-
-@Composable
-fun EffectChip(
-    effect: Effect,
-    onRemove: () -> Unit
-) {
-    InputChip(
-        selected = true,
-        onClick = onRemove,
-        label = { Text(effect.name) },
-        trailingIcon = {
-            Icon(
-                Icons.Default.Close,
-                "Remove",
-                modifier = Modifier.size(16.dp)
+            drawCircle(
+                color = Color.Cyan.copy(alpha = 0.8f),
+                radius = 12f,
+                center = Offset(offsetX * size.width, offsetY * size.height)
             )
         }
-    )
+    }
 }
