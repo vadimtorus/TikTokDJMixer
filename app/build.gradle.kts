@@ -89,6 +89,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
+    implementation("com.google.android.material:material:1.11.0")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
     implementation("androidx.media3:media3-exoplayer:1.2.1")

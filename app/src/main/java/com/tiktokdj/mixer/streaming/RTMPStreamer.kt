@@ -234,15 +234,34 @@ class RTMPStreamer {
         return true
     }
 
+    /**
+     * Отправляет аудио-чанк в RTMP-поток.
+     *
+     * Sends an audio chunk into the RTMP stream.
+     *
+     * ИСПРАВЛЕНО (порядок чанков): убрана обёртка `scope.launch`. Раньше каждый
+     * вызов порождал отдельную корутину на [Dispatchers.IO], и из-за
+     * многопоточного планировщика чанки могли прийти на сервер в неверном
+     * порядке, ломая RTMP-поток. Теперь `sendChunk` вызывается напрямую;
+     * вызывающий поток (StreamManager) уже выполняется на IO-диспетчере
+     * последовательно, поэтому порядок чанков гарантирован.
+     *
+     * FIX (chunk ordering): removed the `scope.launch` wrapper. Previously each
+     * call spawned a separate coroutine on [Dispatchers.IO], and the
+     * multi-threaded scheduler could execute them out of order, corrupting the
+     * RTMP stream. Now `sendChunk` is called directly; the caller (StreamManager)
+     * already runs sequentially on the IO dispatcher, so chunk order is preserved.
+     *
+     * @param data Аудиоданные FLV / FLV audio data
+     * @param timestamp Метка времени RTMP / RTMP timestamp
+     */
     fun sendAudioData(data: ByteArray, timestamp: Int = 0) {
         if (_streamState.value !is RTMPState.Streaming) return
-        scope.launch {
-            try {
-                val flvTag = buildFLVAudioTag(data)
-                sendChunk(4, 0x08, timestamp, flvTag)
-            } catch (e: Exception) {
-                Log.e(TAG, "Send audio error", e)
-            }
+        try {
+            val flvTag = buildFLVAudioTag(data)
+            sendChunk(4, 0x08, timestamp, flvTag)
+        } catch (e: Exception) {
+            Log.e(TAG, "Send audio error", e)
         }
     }
 

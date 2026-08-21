@@ -209,11 +209,11 @@ class BPMDetector {
 
     /**
      * Нормированная автокорреляция огибающей ударов.
-     * Перебираются только лаги, соответствующие диапазону [minBPM..maxBPM]:
+     * Перебираются только лаги, соответствующие диапазону minBPM..maxBPM:
      * lag = 60·fps / BPM, где fps — частота кадров огибающей (sampleRate/hop).
      *
      * Normalized autocorrelation of the onset envelope.
-     * Only lags matching the [minBPM..maxBPM] range are evaluated:
+     * Only lags matching the minBPM..maxBPM range are evaluated:
      * lag = 60·fps / BPM, where fps is the envelope frame rate (sampleRate/hop).
      */
     private fun computeAutocorrelation(data: FloatArray, sampleRate: Int): FloatArray {
@@ -297,24 +297,34 @@ class BPMDetector {
         var bestBPM = initialBPM
         var bestScore = 0f
 
-        for (delta in -2f..2f step 0.1f) {
+        // ИСПРАВЛЕНО: шаг цикла — целое число 0..40 (шаг 0.1 BPM × 10 = 1),
+        // деление на 10f даёт Float-дельту −2.0..+2.0. Старый `step 0.1f`
+        // не компилировался, т.к. ClosedFloatingPointRange<Float>.step()
+        // требует Int/Long, а не Float.
+        //
+        // FIXED: loop iterates integer 0..40 (0.1 BPM step × 10 = 1),
+        // dividing by 10f yields Float delta −2.0..+2.0. The original
+        // `step 0.1f` did not compile because
+        // ClosedFloatingPointRange<Float>.step() requires Int/Long, not Float.
+        for (i in -20..20) {
+            val delta = i.toFloat() / 10.0f
             val candidateBPM = initialBPM + delta
             if (candidateBPM < minBPM || candidateBPM > maxBPM) continue
 
             // Интервал между ударами кандидата в сэмплах.
             // The candidate's beat interval in samples.
-            val beatInterval = (60.0 * sampleRate / candidateBPM).toFloat()
+            val beatInterval = (60.0 * sampleRate / candidateBPM.toDouble()).toFloat()
             var score = 0f
-            var pos = 0f
+            var pos = 0.0f
 
-            while (pos < audioData.size - beatInterval) {
+            while (pos < audioData.size.toFloat() - beatInterval) {
                 val idx = pos.toInt()
                 val nextIdx = (pos + beatInterval).toInt().coerceAtMost(audioData.size - 1)
 
                 if (idx < audioData.size && nextIdx < audioData.size) {
                     // Средняя энергия в окне между двумя ударами.
                     // Mean energy within the window between two beats.
-                    var varianceSum = 0f
+                    var varianceSum = 0.0f
                     for (k in idx until nextIdx) {
                         val v = audioData[k]
                         varianceSum += v * v

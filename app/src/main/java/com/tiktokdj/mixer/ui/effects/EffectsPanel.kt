@@ -137,6 +137,7 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
  *                      Current list of active effects used to determine the state.
  * @param onToggle Колбэк переключения эффекта. Effect toggle callback.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EffectButton(
     effectType: EffectType,

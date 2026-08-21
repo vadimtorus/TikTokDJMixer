@@ -221,7 +221,12 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
     var searchQuery by remember { mutableStateOf("") }
     var tracks by remember { mutableStateOf(emptyList<Track>()) }
     var isLoading by remember { mutableStateOf(false) }
-    val trackLoader = remember { TrackLoader(LocalContext.current.applicationContext) }
+    // ИСПРАВЛЕНО: контекст получаем до remember, потому что LocalContext.current
+    // — composable-свойство; его чтение внутри remember запрещено компилятором.
+    // FIXED: obtain context before remember because LocalContext.current is a
+    // composable read — using it inside remember is a compiler error.
+    val context = LocalContext.current.applicationContext
+    val trackLoader = remember { TrackLoader(context) }
     val coroutineScope = rememberCoroutineScope()
 
     // Дебаунс поиска: ждём 300 мс после последнего ввода, затем ищем на IO-потоке.
