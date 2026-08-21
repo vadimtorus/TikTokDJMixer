@@ -139,4 +139,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Create an [Issue](../../issues) for bug reports
 - Check [Discussions](../../discussions) for questions
-- Email: your-email@example.com
+- Email: vadimtorus@gmail.com
