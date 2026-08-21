@@ -11,6 +11,17 @@ import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 
+/**
+ * TikTok Live API client: OAuth auth, stream init, audio push.
+ * Uses HTTP POST for each operation; all methods are suspend functions (safe for IO dispatcher).
+ *
+ * Usage flow:
+ * 1. [authenticate] -- get access_token via client_credentials grant
+ * 2. [initLiveStream] -- create live room, receive server_url + stream_key
+ * 3. [startStreaming] -- transition to Streaming state
+ * 4. [pushStreamData] -- send PCM audio chunks
+ * 5. [stopStreaming] -- finish the live room
+ */
 class TikTokLiveStreamer(private val context: Context) {
 
     companion object {

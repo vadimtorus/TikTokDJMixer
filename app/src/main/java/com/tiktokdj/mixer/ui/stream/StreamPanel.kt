@@ -17,11 +17,20 @@ import androidx.compose.ui.unit.sp
 import com.tiktokdj.mixer.model.StreamMethod
 import com.tiktokdj.mixer.model.StreamResolution
 import com.tiktokdj.mixer.streaming.StreamManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Панель управления стримингом в TikTok (RTMP или TikTok Live API).
+ * Streaming control panel for TikTok (RTMP or TikTok Live API).
+ *
+ * @param streamManager менеджер стриминга / streaming manager
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StreamPanel(streamManager: StreamManager) {
+    // Локальное состояние формы / Local form state.
     var selectedMethod by remember { mutableStateOf(StreamMethod.RTMP) }
     var rtmpUrl by remember { mutableStateOf("") }
     var tiktokClientKey by remember { mutableStateOf("") }
@@ -31,6 +40,7 @@ fun StreamPanel(streamManager: StreamManager) {
     var bitrate by remember { mutableFloatStateOf(2500f) }
     var enableMicrophone by remember { mutableStateOf(false) }
 
+    // Состояние стрима из StreamManager / Streaming state from StreamManager.
     val isStreaming by streamManager.isStreaming.collectAsState()
     val scope = rememberCoroutineScope()
     var isStarting by remember { mutableStateOf(false) }
@@ -41,6 +51,8 @@ fun StreamPanel(streamManager: StreamManager) {
     ) {
         Text("Stream to TikTok", fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
+        // Выбор метода стрима: RTMP или TikTok Live API.
+        // Streaming method selection: RTMP or TikTok Live API.
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = selectedMethod == StreamMethod.RTMP,
@@ -71,6 +83,7 @@ fun StreamPanel(streamManager: StreamManager) {
                 singleLine = true
             )
 
+            // Выбор разрешения трансляции / Broadcast resolution selection.
             Text("Resolution", fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StreamResolution.entries.forEach { res ->
@@ -113,6 +126,7 @@ fun StreamPanel(streamManager: StreamManager) {
         Text("Bitrate: ${bitrate.toInt()} kbps", fontSize = 12.sp)
         Slider(value = bitrate, onValueChange = { bitrate = it }, valueRange = 500f..6000f, steps = 10)
 
+        // Переключатель захвата микрофона / Microphone capture toggle.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -124,6 +138,7 @@ fun StreamPanel(streamManager: StreamManager) {
 
         Spacer(modifier = Modifier.weight(1f))
 
+        // Индикатор активной трансляции / Live indicator.
         if (isStreaming) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -145,19 +160,39 @@ fun StreamPanel(streamManager: StreamManager) {
             onClick = {
                 if (isStreaming) {
                     scope.launch {
-                        streamManager.stopStreaming()
+                        // ИСПРАВЛЕНО: остановка стрима — сетевой ввод-вывод, поэтому выполняется
+                        // в Dispatchers.IO. rememberCoroutineScope работает на Main-потоке,
+                        // и прямой вызов мог привести к NetworkOnMainThreadException.
+                        //
+                        // FIXED: stopping the stream performs network I/O, so it now runs on
+                        // Dispatchers.IO. rememberCoroutineScope runs on the Main dispatcher,
+                        // and a direct call could raise NetworkOnMainThreadException.
+                        withContext(Dispatchers.IO) {
+                            streamManager.stopStreaming()
+                        }
                     }
                 } else {
                     isStarting = true
                     scope.launch {
-                        when (selectedMethod) {
-                            StreamMethod.RTMP -> {
-                                streamManager.startRTMPStream(rtmpUrl)
-                            }
-                            StreamMethod.TIKTOK_LIVE_API -> {
-                                streamManager.startTikTokStream(
-                                    tiktokClientKey, tiktokClientSecret, streamTitle
-                                )
+                        // ИСПРАВЛЕНО: запуск стрима выполняет сетевой ввод-вывод (рукопожатие
+                        // с RTMP-сервером / запрос к TikTok API). Переносим работу в
+                        // Dispatchers.IO; обновление isStarting после withContext происходит
+                        // уже в Main-потоке, так как scope привязан к композиции.
+                        //
+                        // FIXED: starting a stream performs network I/O (RTMP handshake /
+                        // TikTok API request). The work is moved to Dispatchers.IO; the
+                        // isStarting update after withContext runs back on Main because the
+                        // scope is bound to the composition.
+                        withContext(Dispatchers.IO) {
+                            when (selectedMethod) {
+                                StreamMethod.RTMP -> {
+                                    streamManager.startRTMPStream(rtmpUrl)
+                                }
+                                StreamMethod.TIKTOK_LIVE_API -> {
+                                    streamManager.startTikTokStream(
+                                        tiktokClientKey, tiktokClientSecret, streamTitle
+                                    )
+                                }
                             }
                         }
                         isStarting = false

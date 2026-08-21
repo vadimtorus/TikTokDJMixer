@@ -18,12 +18,43 @@ import com.tiktokdj.mixer.streaming.StreamManager
 import com.tiktokdj.mixer.ui.theme.TikTokDJTheme
 import com.tiktokdj.mixer.updater.AppUpdater
 
+/**
+ * Главная активность приложения: точка сборки всех подсистем.
+ *
+ * Создаёт и связывает:
+ * - [MixerEngine] — аудио-ядро (деки, кроссфейдер, эффекты, спектр);
+ * - [StreamManager] — захват микрофона и стриминг в TikTok/RTMP;
+ * - [AppUpdater] — периодическая проверка обновлений на GitHub;
+ * - Compose UI ([DJMixerApp]) поверх всего этого.
+ *
+ * The app's main activity: the assembly point of all subsystems.
+ *
+ * Creates and wires together:
+ * - [MixerEngine] — the audio core (decks, crossfader, effects, spectrum);
+ * - [StreamManager] — microphone capture and TikTok/RTMP streaming;
+ * - [AppUpdater] — periodic GitHub update checks;
+ * - the Compose UI ([DJMixerApp]) on top of it all.
+ */
 class MainActivity : ComponentActivity() {
 
+    /** Аудио-ядро микшера / Mixer audio core. Инициализируется в [onCreate]. */
     lateinit var mixerEngine: MixerEngine
+
+    /** Менеджер стриминга / Streaming manager. Инициализируется в [onCreate]. */
     lateinit var streamManager: StreamManager
+
+    /** Менеджер автообновления / Auto-update manager. Инициализируется в [onCreate]. */
     lateinit var appUpdater: AppUpdater
 
+    /**
+     * Список ещё не выданных разрешений, необходимых приложению:
+     * микрофон (захват звука) и, начиная с Android 13, уведомления
+     * (для foreground-сервиса стрима и уведомлений об обновлениях).
+     *
+     * List of not-yet-granted permissions the app needs:
+     * microphone (audio capture) and, from Android 13 on, notifications
+     * (for the streaming foreground service and update notifications).
+     */
     private val requiredPermissions: Array<String>
         get() {
             val perms = mutableListOf<String>()
@@ -42,6 +73,13 @@ class MainActivity : ComponentActivity() {
             return perms.toTypedArray()
         }
 
+    /**
+     * Лончер запроса разрешений; результат не обрабатываем —
+     * функции деградируют мягко, если доступ не выдан.
+     *
+     * Permission-request launcher; the result is ignored —
+     * features degrade gracefully when access is denied.
+     */
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { }
@@ -50,16 +88,39 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Запрашиваем недостающие разрешения до создания подсистем.
+        // Request missing permissions before creating the subsystems.
         val perms = requiredPermissions
         if (perms.isNotEmpty()) {
             permissionLauncher.launch(perms)
         }
 
+        // Ядро микшера: деки A/B, кроссфейдер, эффекты, спектральный анализ.
+        // Mixer core: decks A/B, crossfader, effects, spectral analysis.
         mixerEngine = MixerEngine(applicationContext)
         mixerEngine.initialize()
 
+        // Менеджер стриминга: захват микрофона и доставка в TikTok Live / RTMP.
+        // Streaming manager: mic capture and delivery to TikTok Live / RTMP.
         streamManager = StreamManager(applicationContext)
+
+        // СВЯЗЫВАНИЕ ПОДСИСТЕМ: передаём стримингу процессор эффектов движка,
+        // чтобы активные эффекты применялись к захваченному звуку перед отправкой
+        // в эфир, и его же спектральный анализатор — для визуализации спектра.
+        //
+        // SUBSYSTEM WIRING: hand the engine's effects processor to the streamer so
+        // active effects are applied to captured audio before going on air, plus
+        // its spectral analyzer for spectrum visualization.
+        streamManager.effectsProcessor = mixerEngine.effectsProcessor
+        streamManager.spectralAnalyzer = mixerEngine.spectralAnalyzer
+
+        // Менеджер автообновления + запуск периодической проверки релизов
+        // GitHub-репозитория (каждые 6 часов, см. AppUpdater.CHECK_INTERVAL_MS).
+        //
+        // Auto-update manager + start of periodic checks of the GitHub repo's
+        // releases (every 6 hours, see AppUpdater.CHECK_INTERVAL_MS).
         appUpdater = AppUpdater(applicationContext)
+        appUpdater.startPeriodicCheck("vadimtorus", "TikTokDJMixer")
 
         setContent {
             TikTokDJTheme {
@@ -77,6 +138,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Освобождает все подсистемы в обратном порядке создания.
+     * Releases all subsystems in reverse creation order.
+     */
     override fun onDestroy() {
         mixerEngine.release()
         streamManager.cleanup()

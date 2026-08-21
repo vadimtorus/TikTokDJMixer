@@ -13,11 +13,29 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.random.Random
 
+/**
+ * Клиент RTMP-стриминга: рукопожатие, подключение, отправка аудио-чанков.
+ * RTMP streaming client: handshake, connection, audio chunk delivery.
+ *
+ * Протокол: RTMP 1.0 (Adobe). Аудио кодируется как Raw PCM (tag 0xAF, 0x01).
+ * Protocol: RTMP 1.0 (Adobe). Audio encoded as Raw PCM (tag 0xAF, 0x01).
+ *
+ * Использование / Usage:
+ * 1. [connect] — TCP-соединение + рукопожатие + AMF0 «connect».
+ *               TCP connection + handshake + AMF0 "connect".
+ * 2. [startStreaming] — переводит в состояние [RTMPState.Streaming].
+ *                       Transitions to [RTMPState.Streaming].
+ * 3. [sendAudioData] — отправка PCM-чанков (без блокировки, корутина на IO).
+ *                       Sends PCM chunks (non-blocking coroutine on IO).
+ * 4. [disconnect] — закрытие сокета. Closes the socket.
+ */
 class RTMPStreamer {
 
     companion object {
         private const val TAG = "RTMPStreamer"
+        /** Стандартный порт RTMP. Standard RTMP port. */
         private const val RTMP_PORT = 1935
+        /** Размер чанка RTMP по умолчанию. Default RTMP chunk size. */
         private const val RTMP_CHUNK_SIZE = 128
     }
 

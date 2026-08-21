@@ -16,17 +16,49 @@ import com.tiktokdj.mixer.engine.MixerEngine
 import com.tiktokdj.mixer.model.Effect
 import com.tiktokdj.mixer.model.EffectType
 
+// ============================================================
+// СЕКЦИЯ: Панель эффектов / SECTION: Effects panel
+// Экран управления аудиоэффектами: сетка кнопок включения
+// и список активных эффектов.
+// Audio effects control screen: a grid of toggle buttons
+// and a list of active effects.
+// ============================================================
+
+/**
+ * Главная панель эффектов — отображает сетку из 9 кнопок эффектов
+ * (эхо, реверб, дилей, флэнжер, фейзер, ФНЧ, ФВЧ, дисторшн, биткрашер)
+ * и чипы активных эффектов.
+ * Main effects panel - displays a grid of 9 effect buttons
+ * (echo, reverb, delay, flanger, phaser, LP filter, HP filter, distortion, bitcrusher)
+ * and chips of active effects.
+ *
+ * Состояние активных эффектов хранится локально и синхронизируется
+ * с процессором эффектов микшерного движка.
+ * Active effects state is stored locally and synchronized
+ * with the mixer engine's effects processor.
+ *
+ * @param mixerEngine Ссылка на микшерный движок для добавления/удаления эффектов.
+ *                    Reference to the mixer engine for adding/removing effects.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EffectsPanel(mixerEngine: MixerEngine) {
+    // Наблюдаемый список активных типов эффектов / Observable list of active effect types
     val activeEffects = remember { mutableStateListOf<EffectType>() }
 
+    // Функция переключения эффекта: добавляет или удаляет его в движке.
+    // Toggle function: adds or removes the effect in the engine.
+    // remember гарантирует стабильную ссылку между рекомпозициями.
+    // remember guarantees a stable reference across recompositions.
     val toggleEffect = remember<(EffectType) -> Unit> {
         { type: EffectType ->
             if (activeEffects.contains(type)) {
+                // Эффект уже активен — удаляем его / Effect already active - remove it
                 activeEffects.remove(type)
                 mixerEngine.effectsProcessor.removeEffect(type)
             } else {
+                // Эффект неактивен — добавляем с интенсивностью по умолчанию 0.5
+                // Effect inactive - add it with default intensity of 0.5
                 activeEffects.add(type)
                 mixerEngine.effectsProcessor.addEffect(
                     Effect(type.name, type.name, type, 0.5f)
@@ -39,6 +71,7 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Заголовок экрана / Screen title
         Text(
             text = "Effects",
             fontSize = 20.sp,
@@ -46,6 +79,7 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
             modifier = Modifier.padding(8.dp)
         )
 
+        // Сетка кнопок эффектов: 3 ряда по 3 кнопки / Effect button grid: 3 rows of 3 buttons
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -71,6 +105,8 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Список активных эффектов в виде кликабельных чипов
+        // List of active effects as clickable chips
         if (activeEffects.isNotEmpty()) {
             Text("Active Effects", fontSize = 14.sp, fontWeight = FontWeight.Medium)
             activeEffects.forEach { type ->
@@ -87,6 +123,20 @@ fun EffectsPanel(mixerEngine: MixerEngine) {
     }
 }
 
+/**
+ * Кнопка одного эффекта — карточка с иконкой и подписью.
+ * A single effect button - a card with an icon and a label.
+ *
+ * Визуально подсвечивается (цветом primary), когда эффект активен.
+ * Visually highlighted (with the primary color) when the effect is active.
+ *
+ * @param effectType Тип эффекта, за который отвечает кнопка. The effect type this button controls.
+ * @param label Текстовая подпись кнопки. Text label of the button.
+ * @param icon Иконка эффекта. The effect icon.
+ * @param activeEffects Текущий список активных эффектов для определения состояния.
+ *                      Current list of active effects used to determine the state.
+ * @param onToggle Колбэк переключения эффекта. Effect toggle callback.
+ */
 @Composable
 fun EffectButton(
     effectType: EffectType,
@@ -96,12 +146,15 @@ fun EffectButton(
     onToggle: (EffectType) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Эффект считается активным, если присутствует в списке
+    // An effect is considered active if present in the list
     val isActive = activeEffects.contains(effectType)
 
     Card(
         onClick = { onToggle(effectType) },
         modifier = modifier,
         colors = CardDefaults.cardColors(
+            // Активный эффект подсвечивается цветом темы / Active effect is highlighted with the theme color
             containerColor = if (isActive)
                 MaterialTheme.colorScheme.primary
             else
@@ -114,6 +167,7 @@ fun EffectButton(
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Цвет иконки зависит от состояния активности / Icon color depends on the active state
             Icon(
                 icon, label,
                 tint = if (isActive) MaterialTheme.colorScheme.onPrimary

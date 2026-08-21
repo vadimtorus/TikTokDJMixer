@@ -29,6 +29,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Корневой Compose-экран приложения: верхняя панель, нижняя навигация
+ * и переключение между четырьмя вкладками (микшер, эффекты, стрим, библиотека).
+ *
+ * The app's root Compose screen: top bar, bottom navigation and switching
+ * between the four tabs (mixer, effects, stream, library).
+ *
+ * @param mixerEngine Аудио-ядро / audio core
+ * @param streamManager Менеджер стриминга / streaming manager
+ * @param appUpdater Менеджер автообновления / auto-update manager
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DJMixerApp(
@@ -36,9 +47,13 @@ fun DJMixerApp(
     streamManager: StreamManager,
     appUpdater: AppUpdater
 ) {
+    // Индекс активной вкладки нижней навигации.
+    // Index of the active bottom-navigation tab.
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Mixer", "Effects", "Stream", "Library")
 
+    // Подписка на реактивное состояние микшера: recomposition при каждом изменении.
+    // Subscribe to the reactive mixer state: recomposition on every change.
     val mixerState by mixerEngine.mixerState.collectAsState()
 
     Scaffold(
@@ -81,6 +96,8 @@ fun DJMixerApp(
                 .padding(padding)
                 .padding(8.dp)
         ) {
+            // Отображаем экран выбранной вкладки.
+            // Show the screen of the selected tab.
             when (selectedTab) {
                 0 -> MixerScreen(mixerEngine, mixerState)
                 1 -> EffectsScreen(mixerEngine)
@@ -91,8 +108,18 @@ fun DJMixerApp(
     }
 }
 
+/**
+ * Экран микшера: две деки бок о бок, спектр-анализатор, эквалайзер и кроссфейдер.
+ *
+ * The mixer screen: two side-by-side decks, a spectrum analyzer, EQ and crossfader.
+ */
 @Composable
 fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
+    // Опрос состояния каждые 100 мс: позиции воспроизведения меняются
+    // внутри DeckPlayer, поэтому их нужно подтягивать в общий MixerState.
+    //
+    // Poll state every 100 ms: playback positions change inside DeckPlayer,
+    // so they must be pulled into the shared MixerState.
     LaunchedEffect(Unit) {
         while (true) {
             mixerEngine.updateMixerState()
@@ -110,6 +137,8 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
                 .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Дека A: все колбэки пробрасываются напрямую в DeckPlayer движка.
+            // Deck A: every callback is forwarded straight to the engine's DeckPlayer.
             DeckPanel(
                 deckId = "A",
                 state = mixerState.deckA,
@@ -122,6 +151,8 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
                 onHotCue = { mixerEngine.deckA.jumpToHotCue(it) }
             )
 
+            // Дека B: аналогична деке A.
+            // Deck B: mirrors deck A.
             DeckPanel(
                 deckId = "B",
                 state = mixerState.deckB,
@@ -135,6 +166,8 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
             )
         }
 
+        // Спектр-анализатор: опрашивает движок с частотой ~20 FPS.
+        // Spectrum analyzer: polls the engine at ~20 FPS.
         SpectrumAnalyzer(
             getSpectrumData = { mixerEngine.getSpectralData() },
             modifier = Modifier
@@ -142,6 +175,8 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
                 .height(80.dp)
         )
 
+        // Эквалайзер обоих деков (LOW/MID/HI).
+        // Both decks' equalizer (LOW/MID/HI).
         EQPanel(
             deckAState = mixerState.deckA.eq,
             deckBState = mixerState.deckB.eq,
@@ -149,6 +184,8 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
             onEQChangeDeckB = { low, mid, high -> mixerEngine.deckB.setEQ(low, mid, high) }
         )
 
+        // Кроссфейдер + кнопка синхронизации BPM.
+        // Crossfader + BPM sync toggle.
         CrossfaderBar(
             position = mixerState.crossfader,
             onPositionChange = { mixerEngine.setCrossfader(it) },
@@ -158,24 +195,37 @@ fun MixerScreen(mixerEngine: MixerEngine, mixerState: MixerState) {
     }
 }
 
+/** Экран эффектов / The effects screen. */
 @Composable
 fun EffectsScreen(mixerEngine: MixerEngine) {
     EffectsPanel(mixerEngine = mixerEngine)
 }
 
+/** Экран стриминга / The streaming screen. */
 @Composable
 fun StreamScreen(streamManager: StreamManager) {
     StreamPanel(streamManager = streamManager)
 }
 
+/**
+ * Экран библиотеки: поиск треков по медиатеке устройства с дебаунсом 300 мс
+ * и загрузка найденного трека на свободную деку (сначала A, затем B).
+ *
+ * The library screen: device-media-library search with a 300 ms debounce,
+ * loading a found track onto the free deck (A first, then B).
+ */
 @Composable
 fun LibraryScreen(mixerEngine: MixerEngine) {
+    // Локальное состояние экрана: запрос, результаты, индикатор загрузки.
+    // Screen-local state: query, results, loading indicator.
     var searchQuery by remember { mutableStateOf("") }
     var tracks by remember { mutableStateOf(emptyList<Track>()) }
     var isLoading by remember { mutableStateOf(false) }
     val trackLoader = remember { TrackLoader(LocalContext.current.applicationContext) }
     val coroutineScope = rememberCoroutineScope()
 
+    // Дебаунс поиска: ждём 300 мс после последнего ввода, затем ищем на IO-потоке.
+    // Search debounce: wait 300 ms after the last keystroke, then search on IO.
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) {
             tracks = emptyList()
@@ -221,6 +271,8 @@ fun LibraryScreen(mixerEngine: MixerEngine) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
+                            // Загружаем на первую свободную деку: A, иначе B.
+                            // Load onto the first free deck: A, otherwise B.
                             if (mixerEngine.deckA.hasTrack().not()) {
                                 mixerEngine.deckA.loadTrack(track)
                             } else {
